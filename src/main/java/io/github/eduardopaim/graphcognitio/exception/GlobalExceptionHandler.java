@@ -10,6 +10,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
@@ -47,11 +48,32 @@ public class GlobalExceptionHandler {
         Map<String, String> errors = ex.getConstraintViolations()
                 .stream()
                 .collect(Collectors.toMap(
-                        violation -> violation.getPropertyPath().toString(),
+                        violation -> simplifyPath(violation.getPropertyPath().toString()),
                         violation -> violation.getMessage(),
                         (first, second) -> first,
                         LinkedHashMap::new
                 ));
+        problemDetail.setProperty("errors", errors);
+        return problemDetail;
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ProblemDetail handleMethodValidation(HandlerMethodValidationException ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                "Validation failed"
+        );
+        problemDetail.setTitle("Bad Request");
+
+        Map<String, String> errors = new LinkedHashMap<>();
+        ex.getAllValidationResults().forEach(result -> {
+            String parameterName = result.getMethodParameter().getParameterName();
+            String field = parameterName == null ? "parameter" : parameterName;
+            result.getResolvableErrors().forEach(error -> {
+                String message = error.getDefaultMessage() == null ? "Invalid value" : error.getDefaultMessage();
+                errors.putIfAbsent(field, message);
+            });
+        });
         problemDetail.setProperty("errors", errors);
         return problemDetail;
     }
@@ -110,5 +132,16 @@ public class GlobalExceptionHandler {
         );
         problemDetail.setTitle("Internal Server Error");
         return problemDetail;
+    }
+
+    private String simplifyPath(String propertyPath) {
+        if (propertyPath == null || propertyPath.isBlank()) {
+            return "parameter";
+        }
+        int lastDot = propertyPath.lastIndexOf('.');
+        if (lastDot >= 0 && lastDot + 1 < propertyPath.length()) {
+            return propertyPath.substring(lastDot + 1);
+        }
+        return propertyPath;
     }
 }
