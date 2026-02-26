@@ -1,3 +1,16 @@
 spring:
   application:
     name: graphcognitio
+  datasource:
+    url: jdbc:postgresql://localhost:5432/graphcognitio
+    username: graphcognitio
+    password: graphcognitio_dev_password
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
