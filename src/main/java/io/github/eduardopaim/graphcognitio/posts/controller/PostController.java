@@ -45,6 +45,20 @@ public class PostController {
         return ResponseEntity.created(location).body(response);
     }
 
+    @PostMapping("/{id}/reply")
+    public ResponseEntity<PostResponse> createReply(@AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+                                                    @PathVariable UUID id,
+                                                    @Valid @RequestBody CreatePostRequest request) {
+        if (authenticatedUser == null) {
+            throw new UnauthorizedException("Unauthorized");
+        }
+
+        PostResponse response = postService.createReply(authenticatedUser.userId(), id, request);
+        URI location = URI.create("/posts/" + response.id());
+
+        return ResponseEntity.created(location).body(response);
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<PostResponse> getPost(@PathVariable UUID id) {
         return ResponseEntity.ok(postService.getPostById(id));
