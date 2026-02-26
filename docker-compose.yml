@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: graphcognitio-postgres
+    environment:
+      POSTGRES_DB: graphcognitio
+      POSTGRES_USER: graphcognitio
+      POSTGRES_PASSWORD: graphcognitio_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - graphcognitio_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  graphcognitio_postgres_data:
