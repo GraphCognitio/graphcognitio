@@ -31,6 +31,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -62,6 +65,7 @@ public class PostService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "feedCache", allEntries = true)
     public PostResponse createRootPost(UUID authorId, CreatePostRequest request) {
         UserEntity author = loadRequiredUser(authorId);
 
@@ -88,6 +92,10 @@ public class PostService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "feedCache", allEntries = true),
+            @CacheEvict(cacheNames = "graphCache", allEntries = true)
+    })
     public PostResponse createReply(UUID authorId, UUID parentPostId, CreatePostRequest request) {
         UserEntity author = loadRequiredUser(authorId);
 
@@ -144,6 +152,10 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+            cacheNames = "feedCache",
+            key = "T(io.github.eduardopaim.graphcognitio.cache.CacheKeys).feed(#cursor, #limit, #viewerId)"
+    )
     public FeedResponse getFeed(String cursor, int limit, UUID viewerId) {
         CursorKey cursorKey = decodeCursor(cursor);
         Pageable pageable = PageRequest.of(0, limit + 1);
@@ -181,6 +193,10 @@ public class PostService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "feedCache", allEntries = true),
+            @CacheEvict(cacheNames = "graphCache", allEntries = true)
+    })
     public PostResponse likePost(UUID userId, UUID postId) {
         UserEntity actor = loadRequiredUser(userId);
 
@@ -212,6 +228,10 @@ public class PostService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "feedCache", allEntries = true),
+            @CacheEvict(cacheNames = "graphCache", allEntries = true)
+    })
     public PostResponse unlikePost(UUID userId, UUID postId) {
         UserEntity actor = loadRequiredUser(userId);
 
@@ -236,6 +256,10 @@ public class PostService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "feedCache", allEntries = true),
+            @CacheEvict(cacheNames = "graphCache", allEntries = true)
+    })
     public PostResponse updatePost(UUID actorUserId, UUID postId, UpdatePostRequest request) {
         UserEntity actor = loadRequiredUser(actorUserId);
         PostEntity post = postRepository.findById(postId)
@@ -262,6 +286,10 @@ public class PostService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "feedCache", allEntries = true),
+            @CacheEvict(cacheNames = "graphCache", allEntries = true)
+    })
     public void deletePost(UUID actorUserId, UUID postId) {
         UserEntity actor = loadRequiredUser(actorUserId);
         PostEntity post = postRepository.findById(postId)

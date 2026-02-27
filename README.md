@@ -66,6 +66,8 @@ cp .env.example .env
 - `APP_RATE_LIMIT_*` tuning variables for each protected route group (see `.env.example`)
 - `APP_IDEMPOTENCY_ENABLED` (optional, default `true`)
 - `APP_IDEMPOTENCY_TTL_MINUTES` (optional, default `120`)
+- `APP_CACHE_MAX_SIZE` (optional, default `1000`)
+- `APP_CACHE_TTL_SECONDS` (optional, default `30`)
 
 ## Running Locally
 
@@ -183,7 +185,7 @@ When a limit is exceeded, API returns:
   - `userId` (when request is authenticated)
 - Custom HTTP metrics:
   - `graphcognitio.http.server.latency` (timer by method/uri/status)
-- `graphcognitio.http.server.errors` (counter by method/uri/statusClass)
+  - `graphcognitio.http.server.errors` (counter by method/uri/statusClass)
 
 ## Idempotency
 
@@ -194,6 +196,19 @@ When a limit is exceeded, API returns:
   - repeated request with same key and same payload returns stored response
   - same key with different payload returns `409 Conflict`
   - expired key is discarded and request executes again
+
+## Cache
+
+- Caffeine in-memory cache with short TTL for hot reads:
+  - `feedCache` key: `viewerId|limit|cursor`
+  - `graphCache` key: `rootId|depth|limit`
+- Write operations invalidate cache entries to avoid stale reads:
+  - root/reply creation
+  - likes/unlikes
+  - post updates/deletes
+- Metrics available via Micrometer:
+  - `cache.gets` with `cache=feedCache|graphCache` and `result=hit|miss`
+  - `cache.puts` and `cache.evictions` for cache behavior tracking
 
 ## Testing
 
@@ -235,6 +250,5 @@ Primary risks and current controls:
 
 Residual risks for next hardening phase:
 
-- Missing caching strategy for feed/graph hot paths
 - Missing full-text search and ranking
 - Missing security automation in CI (SCA/CodeQL)

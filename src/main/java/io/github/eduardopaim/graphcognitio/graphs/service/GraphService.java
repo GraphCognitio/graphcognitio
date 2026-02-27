@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +39,10 @@ public class GraphService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+            cacheNames = "graphCache",
+            key = "T(io.github.eduardopaim.graphcognitio.cache.CacheKeys).graph(#rootId, #depth, #limit)"
+    )
     public ConversationGraphResponse getConversationGraph(UUID rootId, int depth, int limit) {
         PostEntity root = postRepository.findByIdAndParentIdIsNull(rootId)
                 .orElseThrow(() -> new ResourceNotFoundException("Root post not found"));

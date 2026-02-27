@@ -1,7 +1,5 @@
 package io.github.eduardopaim.graphcognitio.audit.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.eduardopaim.graphcognitio.entity.AuditLogEntity;
 import io.github.eduardopaim.graphcognitio.repository.AuditLogRepository;
 import java.util.Map;
@@ -13,11 +11,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuditLogService {
 
     private final AuditLogRepository auditLogRepository;
-    private final ObjectMapper objectMapper;
 
-    public AuditLogService(AuditLogRepository auditLogRepository, ObjectMapper objectMapper) {
+    public AuditLogService(AuditLogRepository auditLogRepository) {
         this.auditLogRepository = auditLogRepository;
-        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -31,18 +27,7 @@ public class AuditLogService {
         auditLog.setAction(action);
         auditLog.setEntityType(entityType);
         auditLog.setEntityId(entityId);
-        auditLog.setMetadata(toJson(metadata));
+        auditLog.setMetadata(metadata);
         auditLogRepository.save(auditLog);
-    }
-
-    private String toJson(Map<String, Object> metadata) {
-        if (metadata == null || metadata.isEmpty()) {
-            return null;
-        }
-        try {
-            return objectMapper.writeValueAsString(metadata);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Failed to serialize audit metadata", ex);
-        }
     }
 }

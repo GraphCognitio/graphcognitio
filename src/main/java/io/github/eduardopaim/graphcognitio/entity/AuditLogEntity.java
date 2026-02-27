@@ -6,7 +6,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "audit_log")
@@ -27,8 +30,9 @@ public class AuditLogEntity {
     @Column(name = "entity_id", nullable = false)
     private UUID entityId;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "metadata", columnDefinition = "jsonb")
-    private String metadata;
+    private Map<String, Object> metadata;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -73,11 +77,11 @@ public class AuditLogEntity {
         this.entityId = entityId;
     }
 
-    public String getMetadata() {
+    public Map<String, Object> getMetadata() {
         return metadata;
     }
 
-    public void setMetadata(String metadata) {
+    public void setMetadata(Map<String, Object> metadata) {
         this.metadata = metadata;
     }
 

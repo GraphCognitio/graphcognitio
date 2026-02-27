@@ -16,6 +16,11 @@ spring:
     enabled: true
     placeholders:
       bootstrap_admin_email: ${APP_BOOTSTRAP_ADMIN_EMAIL:}
+  cache:
+    type: caffeine
+    cache-names: feedCache,graphCache
+    caffeine:
+      spec: maximumSize=${APP_CACHE_MAX_SIZE:1000},expireAfterWrite=${APP_CACHE_TTL_SECONDS:30}s,recordStats
 
 app:
   jwt:
