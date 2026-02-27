@@ -2,9 +2,9 @@ spring:
   application:
     name: graphcognitio
   datasource:
-    url: jdbc:postgresql://localhost:5432/graphcognitio
-    username: graphcognitio
-    password: graphcognitio_dev_password
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/graphcognitio}
+    username: ${SPRING_DATASOURCE_USERNAME:graphcognitio}
+    password: ${SPRING_DATASOURCE_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate
