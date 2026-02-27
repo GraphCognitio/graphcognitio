@@ -14,6 +14,10 @@ import io.github.eduardopaim.graphcognitio.auth.dto.LoginRequest;
 import io.github.eduardopaim.graphcognitio.auth.dto.RegisterRequest;
 import io.github.eduardopaim.graphcognitio.auth.service.AuthService;
 import io.github.eduardopaim.graphcognitio.entity.UserRole;
+import io.github.eduardopaim.graphcognitio.observability.AuthenticatedUserMdcFilter;
+import io.github.eduardopaim.graphcognitio.observability.HttpMetricsFilter;
+import io.github.eduardopaim.graphcognitio.observability.RequestCorrelationFilter;
+import io.github.eduardopaim.graphcognitio.ratelimit.RateLimitFilter;
 import io.github.eduardopaim.graphcognitio.security.JwtAuthenticationFilter;
 import java.time.Instant;
 import java.util.UUID;
@@ -29,7 +33,16 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(
         controllers = AuthController.class,
-        excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class)
+        excludeFilters = @ComponentScan.Filter(
+                type = FilterType.ASSIGNABLE_TYPE,
+                classes = {
+                        JwtAuthenticationFilter.class,
+                        RequestCorrelationFilter.class,
+                        AuthenticatedUserMdcFilter.class,
+                        HttpMetricsFilter.class,
+                        RateLimitFilter.class
+                }
+        )
 )
 @AutoConfigureMockMvc(addFilters = false)
 class GraphcognitioApplicationTests {

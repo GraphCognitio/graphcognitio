@@ -16,10 +16,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.eduardopaim.graphcognitio.entity.UserRole;
 import io.github.eduardopaim.graphcognitio.exception.ResourceNotFoundException;
 import io.github.eduardopaim.graphcognitio.idempotency.IdempotencyService;
+import io.github.eduardopaim.graphcognitio.observability.AuthenticatedUserMdcFilter;
+import io.github.eduardopaim.graphcognitio.observability.HttpMetricsFilter;
+import io.github.eduardopaim.graphcognitio.observability.RequestCorrelationFilter;
 import io.github.eduardopaim.graphcognitio.posts.dto.CreatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.dto.PostResponse;
 import io.github.eduardopaim.graphcognitio.posts.dto.UpdatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.service.PostService;
+import io.github.eduardopaim.graphcognitio.ratelimit.RateLimitFilter;
 import io.github.eduardopaim.graphcognitio.security.AuthenticatedUser;
 import io.github.eduardopaim.graphcognitio.security.JwtAuthenticationFilter;
 import java.time.Instant;
@@ -40,7 +44,16 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(
         controllers = PostController.class,
-        excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class)
+        excludeFilters = @ComponentScan.Filter(
+                type = FilterType.ASSIGNABLE_TYPE,
+                classes = {
+                        JwtAuthenticationFilter.class,
+                        RequestCorrelationFilter.class,
+                        AuthenticatedUserMdcFilter.class,
+                        HttpMetricsFilter.class,
+                        RateLimitFilter.class
+                }
+        )
 )
 @AutoConfigureMockMvc(addFilters = false)
 class PostControllerWebMvcTest {

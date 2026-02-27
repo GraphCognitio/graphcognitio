@@ -70,6 +70,7 @@ cp .env.example .env
 - `APP_CACHE_TTL_SECONDS` (optional, default `30`)
 - `ENABLE_SEARCH` (optional, default `true`)
 - `ENABLE_GRAPH_EXPAND` (optional, default `true`)
+- `APP_CORS_ALLOWED_ORIGINS` (required in prod; comma-separated origins for browser access)
 
 ## Running Locally
 
@@ -96,8 +97,8 @@ Profiles:
 
 - default profile: `dev`
 - `application-dev.yml`: local-friendly docs enabled
-- `application-test.yml`: docs disabled for test runs
-- `application-prod.yml`: docs disabled by default unless explicitly enabled
+- `application-test.yml`: docs disabled for test runs, local CORS allowed by default
+- `application-prod.yml`: docs disabled by default unless explicitly enabled, no default CORS origin
 
 ## API Surface
 
@@ -167,6 +168,13 @@ Delete constraint:
 - `Authorization` header format: `Bearer <accessToken>`
 - JWT payload includes role claim used by the API authorization context
 - Validation and domain errors are returned as RFC 7807 `application/problem+json`
+- CORS allowed origins are environment-driven through `APP_CORS_ALLOWED_ORIGINS`
+- Security headers enabled:
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `Referrer-Policy: same-origin`
+  - `Permissions-Policy: camera=(), geolocation=(), microphone=()`
+  - HSTS in secure deployments
 
 ## RBAC and Ownership
 
@@ -246,6 +254,15 @@ When a limit is exceeded, API returns:
   - `/graphs/conversation/{rootId}` still works with the default depth
   - requests with `depth > 2` return `400 Bad Request`
 
+## CI and Security Automation
+
+- GitHub Actions:
+  - `backend-ci`: runs `./mvnw test` on push to `main` and on pull requests
+  - `codeql`: runs Java static analysis on push, pull request, and weekly schedule
+- Dependabot:
+  - weekly updates for Maven dependencies
+  - weekly updates for GitHub Actions
+
 ## Testing
 
 Test suite includes:
@@ -284,6 +301,10 @@ Primary risks and current controls:
 4. Graph/feed query amplification
 - Control: bounded `limit`, depth constraints, and batched traversal.
 
+5. Dependency and workflow supply-chain drift
+- Control: Dependabot for Maven/GitHub Actions + CodeQL workflow in CI.
+
 Residual risks for next hardening phase:
 
-- Missing security automation in CI (SCA/CodeQL)
+- No distributed rate limiting or centralized cache yet
+- No external secret manager integration yet

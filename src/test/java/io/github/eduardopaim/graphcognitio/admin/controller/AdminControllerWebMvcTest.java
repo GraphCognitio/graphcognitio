@@ -12,6 +12,10 @@ import io.github.eduardopaim.graphcognitio.admin.dto.AdminUserResponse;
 import io.github.eduardopaim.graphcognitio.admin.dto.UpdateUserRoleRequest;
 import io.github.eduardopaim.graphcognitio.admin.service.AdminService;
 import io.github.eduardopaim.graphcognitio.entity.UserRole;
+import io.github.eduardopaim.graphcognitio.observability.AuthenticatedUserMdcFilter;
+import io.github.eduardopaim.graphcognitio.observability.HttpMetricsFilter;
+import io.github.eduardopaim.graphcognitio.observability.RequestCorrelationFilter;
+import io.github.eduardopaim.graphcognitio.ratelimit.RateLimitFilter;
 import io.github.eduardopaim.graphcognitio.security.AuthenticatedUser;
 import io.github.eduardopaim.graphcognitio.security.JwtAuthenticationFilter;
 import java.time.Instant;
@@ -32,7 +36,16 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(
         controllers = AdminController.class,
-        excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class)
+        excludeFilters = @ComponentScan.Filter(
+                type = FilterType.ASSIGNABLE_TYPE,
+                classes = {
+                        JwtAuthenticationFilter.class,
+                        RequestCorrelationFilter.class,
+                        AuthenticatedUserMdcFilter.class,
+                        HttpMetricsFilter.class,
+                        RateLimitFilter.class
+                }
+        )
 )
 @AutoConfigureMockMvc(addFilters = false)
 class AdminControllerWebMvcTest {

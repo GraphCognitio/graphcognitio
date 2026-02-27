@@ -9,6 +9,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import io.github.eduardopaim.graphcognitio.posts.dto.FeedResponse;
 import io.github.eduardopaim.graphcognitio.posts.dto.PostResponse;
 import io.github.eduardopaim.graphcognitio.posts.service.PostService;
+import io.github.eduardopaim.graphcognitio.observability.AuthenticatedUserMdcFilter;
+import io.github.eduardopaim.graphcognitio.observability.HttpMetricsFilter;
+import io.github.eduardopaim.graphcognitio.observability.RequestCorrelationFilter;
+import io.github.eduardopaim.graphcognitio.ratelimit.RateLimitFilter;
 import io.github.eduardopaim.graphcognitio.security.JwtAuthenticationFilter;
 import java.time.Instant;
 import java.util.List;
@@ -24,7 +28,16 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(
         controllers = FeedController.class,
-        excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class)
+        excludeFilters = @ComponentScan.Filter(
+                type = FilterType.ASSIGNABLE_TYPE,
+                classes = {
+                        JwtAuthenticationFilter.class,
+                        RequestCorrelationFilter.class,
+                        AuthenticatedUserMdcFilter.class,
+                        HttpMetricsFilter.class,
+                        RateLimitFilter.class
+                }
+        )
 )
 @AutoConfigureMockMvc(addFilters = false)
 class FeedControllerWebMvcTest {
