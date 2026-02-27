@@ -9,4 +9,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface EdgeRepository extends JpaRepository<EdgeEntity, UUID> {
 
     List<EdgeEntity> findBySourcePostIdInOrderByCreatedAtAscIdAsc(Collection<UUID> sourcePostIds);
+
+    void deleteBySourcePostId(UUID sourcePostId);
 }

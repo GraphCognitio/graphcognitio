@@ -1,0 +1,10 @@
+app:
+  security:
+    cors:
+      allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}
+
+springdoc:
+  api-docs:
+    enabled: ${APP_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${APP_SWAGGER_UI_ENABLED:false}

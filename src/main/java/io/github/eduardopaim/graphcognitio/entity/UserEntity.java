@@ -2,6 +2,8 @@ package io.github.eduardopaim.graphcognitio.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
@@ -23,6 +25,10 @@ public class UserEntity {
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false, length = 20)
+    private UserRole role;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -70,10 +76,21 @@ public class UserEntity {
         this.createdAt = createdAt;
     }
 
+    public UserRole getRole() {
+        return role;
+    }
+
+    public void setRole(UserRole role) {
+        this.role = role;
+    }
+
     @PrePersist
     void onCreate() {
         if (id == null) {
             id = UUID.randomUUID();
+        }
+        if (role == null) {
+            role = UserRole.USER;
         }
         if (createdAt == null) {
             createdAt = Instant.now();

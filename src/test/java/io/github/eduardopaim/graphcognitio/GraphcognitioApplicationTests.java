@@ -13,6 +13,11 @@ import io.github.eduardopaim.graphcognitio.auth.dto.AuthUserResponse;
 import io.github.eduardopaim.graphcognitio.auth.dto.LoginRequest;
 import io.github.eduardopaim.graphcognitio.auth.dto.RegisterRequest;
 import io.github.eduardopaim.graphcognitio.auth.service.AuthService;
+import io.github.eduardopaim.graphcognitio.entity.UserRole;
+import io.github.eduardopaim.graphcognitio.observability.AuthenticatedUserMdcFilter;
+import io.github.eduardopaim.graphcognitio.observability.HttpMetricsFilter;
+import io.github.eduardopaim.graphcognitio.observability.RequestCorrelationFilter;
+import io.github.eduardopaim.graphcognitio.ratelimit.RateLimitFilter;
 import io.github.eduardopaim.graphcognitio.security.JwtAuthenticationFilter;
 import java.time.Instant;
 import java.util.UUID;
@@ -28,7 +33,16 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(
         controllers = AuthController.class,
-        excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class)
+        excludeFilters = @ComponentScan.Filter(
+                type = FilterType.ASSIGNABLE_TYPE,
+                classes = {
+                        JwtAuthenticationFilter.class,
+                        RequestCorrelationFilter.class,
+                        AuthenticatedUserMdcFilter.class,
+                        HttpMetricsFilter.class,
+                        RateLimitFilter.class
+                }
+        )
 )
 @AutoConfigureMockMvc(addFilters = false)
 class GraphcognitioApplicationTests {
@@ -48,7 +62,7 @@ class GraphcognitioApplicationTests {
         Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
         AuthResponse response = new AuthResponse(
                 "access-token",
-                new AuthUserResponse(userId, "Eduardo", "eduardo@example.com", createdAt)
+                new AuthUserResponse(userId, "Eduardo", "eduardo@example.com", UserRole.USER, createdAt)
         );
 
         when(authService.register(any(RegisterRequest.class))).thenReturn(response);
@@ -63,6 +77,7 @@ class GraphcognitioApplicationTests {
                 .andExpect(jsonPath("$.user.id").value(userId.toString()))
                 .andExpect(jsonPath("$.user.name").value("Eduardo"))
                 .andExpect(jsonPath("$.user.email").value("eduardo@example.com"))
+                .andExpect(jsonPath("$.user.role").value("USER"))
                 .andExpect(jsonPath("$.user.createdAt").value("2026-02-26T21:10:00Z"));
     }
 
@@ -72,7 +87,7 @@ class GraphcognitioApplicationTests {
         Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
         AuthResponse response = new AuthResponse(
                 "access-token",
-                new AuthUserResponse(userId, "Eduardo", "eduardo@example.com", createdAt)
+                new AuthUserResponse(userId, "Eduardo", "eduardo@example.com", UserRole.USER, createdAt)
         );
 
         when(authService.login(any(LoginRequest.class))).thenReturn(response);
@@ -87,6 +102,7 @@ class GraphcognitioApplicationTests {
                 .andExpect(jsonPath("$.user.id").value(userId.toString()))
                 .andExpect(jsonPath("$.user.name").value("Eduardo"))
                 .andExpect(jsonPath("$.user.email").value("eduardo@example.com"))
+                .andExpect(jsonPath("$.user.role").value("USER"))
                 .andExpect(jsonPath("$.user.createdAt").value("2026-02-26T21:10:00Z"));
     }
 }

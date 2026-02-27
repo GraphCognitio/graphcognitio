@@ -1,323 +1,310 @@
-# Graphcognitio Backend MVP
+# GraphCognitio Backend
 
-MVP de backend para uma rede social estilo "Twitter", com conversas modeladas como grafo:
-- `posts` = nós
-- `edges` do tipo `REPLY` = arestas (`reply -> pai`)
+Backend API for GraphCognitio, a graph-oriented social platform where posts are nodes and replies are directed `REPLY` edges (`reply -> parent`).
 
-## Stack
+## Tech Stack
 
 - Java 17
 - Spring Boot 3.5.11
 - Maven
-- PostgreSQL (`postgres:18`)
+- PostgreSQL 18
 - Spring Data JPA
 - Flyway
 - Spring Security + JWT (JJWT 0.13.0)
-- Lombok
 - MapStruct 1.6.3
+- Lombok
 - springdoc-openapi 2.8.15
 - Testcontainers
 - Docker Compose
 
-## Regras de produto implementadas
+## Architecture
 
-- Post raiz:
-  - `parent_id = null`
-  - `root_id = id`
-- Reply:
-  - `parent_id = post respondido`
-  - `root_id = root do pai` (ou `pai.id` quando o pai é raiz)
-- `content` com máximo de 500 caracteres
-- `reply_count` incrementado no post alvo ao criar reply
-- `edges` registra aresta `REPLY` com:
-  - `source_post_id = reply.id`
-  - `target_post_id = parent.id`
+The code follows a layered structure:
 
-## Modelo de dados
+- `controller`: HTTP contracts and validation boundaries
+- `service`: business rules and transactional orchestration
+- `repository`: data access via JPA
+- `entity`: relational model mapping
+- `dto`/`mapper`: API payloads isolated from persistence model
+- `security`: JWT parsing, auth filter, and security configuration
+- `exception`: centralized RFC 7807 `ProblemDetail` responses
 
-Migração: `src/main/resources/db/migration/V1__init_schema.sql`
+## Domain Model
 
-Tabelas:
-- `users`
-- `posts`
-- `edges`
+- `users` (`role`: `USER`, `MOD`, `ADMIN`)
+- `posts` (`parent_id`, `root_id`, `reply_count`, `like_count`)
+- `edges` (`source_post_id`, `target_post_id`, `type=REPLY`)
+- `post_likes` (unique `post_id + user_id`)
+- `audit_log` (`actor_user_id`, `action`, `entity_type`, `entity_id`, `metadata`, `created_at`)
 
-Inclui constraints de integridade (FKs, check de tipo de edge, check de tamanho de conteúdo, `reply_count >= 0`) e índices para feed/lookup de replies.
+Core rules:
 
-## Segurança
+- Root post: `parent_id = null`, `root_id = id`
+- Reply: `parent_id = target post`, `root_id` inherited from parent
+- Reply flow increments parent `reply_count`
+- Reply flow persists `REPLY` edge with `source=reply`, `target=parent`
 
-JWT obrigatório em todos os endpoints, exceto:
-- `POST /auth/register`
-- `POST /auth/login`
-- `/v3/api-docs/**`
-- `/swagger-ui/**`
-- `/swagger-ui.html`
+## Environment Configuration
 
-Header esperado:
-- `Authorization: Bearer <accessToken>`
+The app is environment-driven. No runtime secret should be committed.
 
-## Variáveis de ambiente
-
-No `application.yml`:
-
-```yaml
-app:
-  jwt:
-    secret: ${APP_JWT_SECRET}
-    exp-minutes: ${APP_JWT_EXP_MINUTES:60}
-```
-
-- `APP_JWT_SECRET` é obrigatório (sem default).
-- `APP_JWT_EXP_MINUTES` é opcional (default 60).
-
-Valor oficial para desenvolvimento/teste:
+Create a local `.env` from `.env.example`:
 
 ```bash
-APP_JWT_SECRET=graphcognitio-dev-secret-key-256bits-minimum-length
+cp .env.example .env
 ```
 
-Importante para produção:
-- usar secret aleatório real com 256 bits
-- armazenar em variável de ambiente segura
+`application.yml` expects:
 
-## Rodando localmente
+- `SPRING_DATASOURCE_URL`
+- `SPRING_DATASOURCE_USERNAME`
+- `SPRING_DATASOURCE_PASSWORD`
+- `APP_JWT_SECRET` (required)
+- `APP_JWT_EXP_MINUTES` (optional, default `60`)
+- `APP_BOOTSTRAP_ADMIN_EMAIL` (optional; promotes matching user to `ADMIN` during Flyway migration)
+- `APP_RATE_LIMIT_ENABLED` (optional, default `true`)
+- `APP_RATE_LIMIT_*` tuning variables for each protected route group (see `.env.example`)
+- `APP_IDEMPOTENCY_ENABLED` (optional, default `true`)
+- `APP_IDEMPOTENCY_TTL_MINUTES` (optional, default `120`)
+- `APP_CACHE_MAX_SIZE` (optional, default `1000`)
+- `APP_CACHE_TTL_SECONDS` (optional, default `30`)
+- `ENABLE_SEARCH` (optional, default `true`)
+- `ENABLE_GRAPH_EXPAND` (optional, default `true`)
+- `APP_CORS_ALLOWED_ORIGINS` (required in prod; comma-separated origins for browser access)
 
-1. Subir PostgreSQL:
+## Running Locally
+
+1. Start PostgreSQL:
 
 ```bash
 docker compose up -d postgres
 ```
 
-`docker-compose.yml` usa:
-- `POSTGRES_DB=graphcognitio`
-- `POSTGRES_USER=graphcognitio`
-- `POSTGRES_PASSWORD=graphcognitio_dev_password`
-- porta `5432:5432`
+2. Export environment variables from `.env` in your shell (or use your preferred loader).
 
-2. Exportar secret JWT:
-
-```bash
-export APP_JWT_SECRET=graphcognitio-dev-secret-key-256bits-minimum-length
-```
-
-3. Subir aplicação:
+3. Start the API:
 
 ```bash
 ./mvnw spring-boot:run
 ```
 
-4. Swagger/OpenAPI:
-- `/swagger-ui/index.html`
-- `/v3/api-docs`
+4. Open API docs:
 
-## Endpoints
+- `http://localhost:8080/swagger-ui/index.html`
+- `http://localhost:8080/v3/api-docs`
 
-Base URL: use o host/porta onde a aplicação estiver executando.
+Profiles:
+
+- default profile: `dev`
+- `application-dev.yml`: local-friendly docs enabled
+- `application-test.yml`: docs disabled for test runs, local CORS allowed by default
+- `application-prod.yml`: docs disabled by default unless explicitly enabled, no default CORS origin
+
+## API Surface
 
 ### Auth
 
-#### `POST /auth/register`
-Request:
-
-```json
-{
-  "name": "Eduardo",
-  "email": "eduardo@example.com",
-  "password": "StrongPassword123"
-}
-```
-
-Response `201 Created`:
-
-```json
-{
-  "accessToken": "<jwt>",
-  "user": {
-    "id": "uuid",
-    "name": "Eduardo",
-    "email": "eduardo@example.com",
-    "createdAt": "2026-02-26T21:10:00Z"
-  }
-}
-```
-
-#### `POST /auth/login`
-Request:
-
-```json
-{
-  "email": "eduardo@example.com",
-  "password": "StrongPassword123"
-}
-```
-
-Response `200 OK` com o mesmo formato de `AuthResponse`.
+- `POST /auth/register`
+- `POST /auth/login`
 
 ### Posts
 
-#### `POST /posts`
-Cria post raiz. `authorId` vem do JWT autenticado (não existe no body).
+- `POST /posts` (create root)
+- `POST /posts/{id}/reply`
+- `GET /posts/{id}`
+- `PATCH /posts/{id}` (author-only edit)
+- `DELETE /posts/{id}` (author delete, or `MOD`/`ADMIN` moderation delete)
+- `POST /posts/{id}/likes`
+- `DELETE /posts/{id}/likes`
 
-Request:
+Idempotency support (`Idempotency-Key` header, optional) is available for:
+- `POST /posts`
+- `POST /posts/{id}/reply`
+- `POST /posts/{id}/likes`
+- `DELETE /posts/{id}/likes`
 
-```json
-{
-  "content": "Meu post raiz"
-}
-```
+Delete constraint:
+- `DELETE /posts/{id}` returns `409 Conflict` when the target post has replies.
 
-Response:
-- `201 Created`
-- `Location: /posts/{novoId}`
-- body `PostResponse`:
+### Admin
 
-```json
-{
-  "id": "uuid",
-  "authorId": "uuid",
-  "authorName": "Eduardo",
-  "content": "Meu post raiz",
-  "createdAt": "2026-02-26T21:10:00Z",
-  "parentId": null,
-  "rootId": "uuid",
-  "replyCount": 0
-}
-```
-
-#### `POST /posts/{id}/reply`
-Request:
-
-```json
-{
-  "content": "Minha resposta"
-}
-```
-
-Response:
-- `201 Created`
-- `Location: /posts/{novoId}`
-- body `PostResponse`
-
-Regras:
-- pai inexistente -> `404 Not Found`
-- UUID inválido -> `400 Bad Request`
-- tudo em uma única transação (post reply + edge + incremento de `reply_count`)
-
-#### `GET /posts/{id}`
-Retorna detalhe de um post no formato `PostResponse`.
+- `PATCH /admin/users/{id}/role` (admin-only role management)
 
 ### Feed
 
-#### `GET /feed?cursor=...&limit=20`
+- `GET /feed?cursor=&limit=`
+- root posts only (`parent_id IS NULL`)
+- stable ordering: `created_at DESC, id DESC`
+- cursor format: URL-safe Base64 of `createdAt|id`
 
-- retorna somente posts raiz (`parent_id IS NULL`)
-- ordenação estável: `created_at DESC, id DESC`
-- cursor:
-  - formato: `Base64 URL-safe(createdAt|id)`
-  - timestamp em ISO-8601 UTC (ex.: `2026-02-26T21:10:00Z`)
-- limites:
-  - `limit` opcional
-  - default `20`
-  - min `1`
-  - max `50` (acima disso -> `400`)
+### Search
 
-Response:
-
-```json
-{
-  "items": [
-    {
-      "id": "uuid",
-      "authorId": "uuid",
-      "authorName": "Eduardo",
-      "content": "Meu post raiz",
-      "createdAt": "2026-02-26T21:10:00Z",
-      "parentId": null,
-      "rootId": "uuid",
-      "replyCount": 1
-    }
-  ],
-  "nextCursor": "..."
-}
-```
-
-Quando não houver mais resultados: `"nextCursor": null`.
+- `GET /search?q=&cursor=&limit=`
+- response shape matches feed: `{ items, nextCursor }`
+- PostgreSQL full-text search over post content
+- ranking order: `searchScore DESC, created_at DESC, id DESC`
+- search cursor format: URL-safe Base64 of `searchScore|createdAt|id`
 
 ### Graph
 
-#### `GET /graphs/conversation/{rootId}?depth=2&limit=120`
+- `GET /graphs/conversation/{rootId}?depth=&limit=`
+- BFS by layers with batched child queries (`WHERE parent_id IN (...)`)
+- no N+1 traversal pattern
 
-- BFS por camadas
-- busca filhos em lote com `WHERE parent_id IN (...)` (sem N+1)
-- para quando:
-  - `depth` acabar
-  - ou `limit` total de nós for atingido (inclui root)
-- `depth=0` retorna só o root
-- `rootId` deve referenciar post raiz
+### Observability
 
-Response:
+- `GET /actuator/health`
+- `GET /actuator/metrics`
+- `GET /actuator/prometheus`
 
-```json
-{
-  "nodes": [
-    {
-      "id": "uuid",
-      "authorId": "uuid",
-      "authorName": "Eduardo",
-      "contentPreview": "texto truncado para no máximo 140 caracteres",
-      "createdAt": "2026-02-26T21:10:00Z",
-      "parentId": null,
-      "rootId": "uuid",
-      "replyCount": 1
-    }
-  ],
-  "edges": [
-    {
-      "id": "uuid",
-      "sourcePostId": "uuid",
-      "targetPostId": "uuid",
-      "type": "REPLY",
-      "createdAt": "2026-02-26T21:11:00Z"
-    }
-  ]
-}
-```
+## Security
 
-## Erros
+- JWT required on all routes except:
+  - `POST /auth/register`
+  - `POST /auth/login`
+  - `/v3/api-docs/**`
+  - `/swagger-ui/**`
+  - `/swagger-ui.html`
+- `Authorization` header format: `Bearer <accessToken>`
+- JWT payload includes role claim used by the API authorization context
+- Validation and domain errors are returned as RFC 7807 `application/problem+json`
+- CORS allowed origins are environment-driven through `APP_CORS_ALLOWED_ORIGINS`
+- Security headers enabled:
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `Referrer-Policy: same-origin`
+  - `Permissions-Policy: camera=(), geolocation=(), microphone=()`
+  - HSTS in secure deployments
 
-A API retorna `ProblemDetail` (`application/problem+json`, RFC 7807).
+## RBAC and Ownership
 
-Exemplo:
+- `USER`: can edit/delete own posts, can create/like/reply
+- `MOD`: can remove posts from other users (still blocked by `409` when replies exist)
+- `ADMIN`: can manage user roles through `/admin/users/{id}/role`
 
-```json
-{
-  "type": "about:blank",
-  "title": "Bad Request",
-  "status": 400,
-  "detail": "Validation failed",
-  "instance": "/feed",
-  "errors": {
-    "limit": "must be less than or equal to 50"
-  }
-}
-```
+All role updates and write operations are auditable via `audit_log`.
 
-## Testes
+## Rate Limiting
 
-Executar:
+In-memory fixed-window rate limiting is applied by endpoint category:
+
+- `POST /auth/register` (anti-abuse)
+- `POST /auth/login` (anti brute-force)
+- `POST /posts`
+- `POST /posts/{id}/reply`
+- `POST|DELETE /posts/{id}/likes`
+
+When a limit is exceeded, API returns:
+
+- status `429 Too Many Requests`
+- RFC 7807 body (`application/problem+json`)
+- headers: `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+
+## Observability
+
+- Actuator endpoints enabled: `health`, `metrics`, `prometheus`
+- Structured JSON logging enabled for console output
+- Correlation header: `X-Request-Id` (accepted from client or generated)
+- MDC fields included in logs:
+  - `requestId`
+  - `userId` (when request is authenticated)
+- Custom HTTP metrics:
+  - `graphcognitio.http.server.latency` (timer by method/uri/status)
+  - `graphcognitio.http.server.errors` (counter by method/uri/statusClass)
+
+## Idempotency
+
+- Header: `Idempotency-Key`
+- Scope: per user + endpoint + payload hash
+- Storage: `idempotency_keys` table with TTL (`expires_at`)
+- Behavior:
+  - repeated request with same key and same payload returns stored response
+  - same key with different payload returns `409 Conflict`
+  - expired key is discarded and request executes again
+
+## Cache
+
+- Caffeine in-memory cache with short TTL for hot reads:
+  - `feedCache` key: `viewerId|limit|cursor`
+  - `graphCache` key: `rootId|depth|limit`
+- Write operations invalidate cache entries to avoid stale reads:
+  - root/reply creation
+  - likes/unlikes
+  - post updates/deletes
+- Metrics available via Micrometer:
+  - `cache.gets` with `cache=feedCache|graphCache` and `result=hit|miss`
+  - `cache.puts` and `cache.evictions` for cache behavior tracking
+
+## Search Ranking
+
+- Full-text index: generated `tsvector` column (`search_vector`) with GIN index
+- Query parser: `plainto_tsquery('simple', q)`
+- Score formula:
+  - `ts_rank_cd(search_vector, tsquery)`
+  - `+ like_count` bonus (capped)
+  - `+ reply_count` bonus (capped)
+- Recency is applied as secondary ordering with `created_at DESC`
+- Search cursor uses `(searchScore, createdAt, id)` to keep pagination stable
+
+## Feature Flags
+
+- `ENABLE_SEARCH=false`
+  - `/search` is not registered and returns `404 Not Found`
+- `ENABLE_GRAPH_EXPAND=false`
+  - `/graphs/conversation/{rootId}` still works with the default depth
+  - requests with `depth > 2` return `400 Bad Request`
+
+## CI and Security Automation
+
+- GitHub Actions:
+  - `backend-ci`: runs `./mvnw test` on push to `main` and on pull requests
+  - `codeql`: runs Java static analysis on push, pull request, and weekly schedule
+- Dependabot:
+  - weekly updates for Maven dependencies
+  - weekly updates for GitHub Actions
+
+## Testing
+
+Test suite includes:
+
+- Unit tests (services)
+- WebMvc tests (controllers)
+- Integration test with Testcontainers (`postgres:18`)
+
+Run all tests:
 
 ```bash
-./mvnw clean test
+./mvnw test
 ```
 
-Inclui:
-- testes unitários e WebMvc
-- teste de integração com Testcontainers (`MvpFlowIntegrationTest`) cobrindo fluxo completo:
-  - register
-  - login
-  - criar post
-  - reply
-  - feed
-  - graph
+## Engineering Decisions (Short)
 
-Observação: Testcontainers requer Docker em execução.
+1. Cursor pagination uses `(created_at, id)` for deterministic ordering and stable pagination windows.
+2. Graph retrieval uses BFS with batched DB reads to avoid N+1 and keep predictable load.
+3. DTO/entity separation protects API contracts from persistence refactors.
+4. JWT is stateless to keep auth simple for MVP and horizontal scaling.
+5. Flyway is mandatory to keep schema evolution reproducible.
+
+## Threat Model (High-Level)
+
+Primary risks and current controls:
+
+1. Unauthorized access to private operations
+- Control: JWT authentication + route-level protection in Spring Security.
+
+2. Input abuse and invalid payloads
+- Control: Bean Validation + global `ProblemDetail` handler.
+
+3. Credential leakage via repository
+- Control: `.env` ignored by git, required secrets provided via environment variables.
+
+4. Graph/feed query amplification
+- Control: bounded `limit`, depth constraints, and batched traversal.
+
+5. Dependency and workflow supply-chain drift
+- Control: Dependabot for Maven/GitHub Actions + CodeQL workflow in CI.
+
+Residual risks for next hardening phase:
+
+- No distributed rate limiting or centralized cache yet
+- No external secret manager integration yet

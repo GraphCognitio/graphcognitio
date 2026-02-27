@@ -2,6 +2,7 @@ package io.github.eduardopaim.graphcognitio.posts.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -9,17 +10,24 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.github.eduardopaim.graphcognitio.audit.service.AuditLogService;
 import io.github.eduardopaim.graphcognitio.entity.EdgeEntity;
 import io.github.eduardopaim.graphcognitio.entity.EdgeType;
 import io.github.eduardopaim.graphcognitio.entity.PostEntity;
+import io.github.eduardopaim.graphcognitio.entity.PostLikeEntity;
 import io.github.eduardopaim.graphcognitio.entity.UserEntity;
+import io.github.eduardopaim.graphcognitio.entity.UserRole;
 import io.github.eduardopaim.graphcognitio.exception.BadRequestException;
+import io.github.eduardopaim.graphcognitio.exception.ConflictException;
+import io.github.eduardopaim.graphcognitio.exception.ForbiddenException;
 import io.github.eduardopaim.graphcognitio.exception.ResourceNotFoundException;
 import io.github.eduardopaim.graphcognitio.posts.dto.CreatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.dto.FeedResponse;
 import io.github.eduardopaim.graphcognitio.posts.dto.PostResponse;
+import io.github.eduardopaim.graphcognitio.posts.dto.UpdatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.mapper.PostMapper;
 import io.github.eduardopaim.graphcognitio.repository.EdgeRepository;
+import io.github.eduardopaim.graphcognitio.repository.PostLikeRepository;
 import io.github.eduardopaim.graphcognitio.repository.PostRepository;
 import io.github.eduardopaim.graphcognitio.repository.UserRepository;
 import java.nio.charset.StandardCharsets;
@@ -27,6 +35,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,7 +58,13 @@ class PostServiceTest {
     private EdgeRepository edgeRepository;
 
     @Mock
+    private PostLikeRepository postLikeRepository;
+
+    @Mock
     private PostMapper postMapper;
+
+    @Mock
+    private AuditLogService auditLogService;
 
     @InjectMocks
     private PostService postService;
@@ -77,9 +92,10 @@ class PostServiceTest {
         when(postRepository.findById(parentId)).thenReturn(Optional.of(parent));
         when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(edgeRepository.save(any(EdgeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo")))
+        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), anyBoolean()))
                 .thenAnswer(invocation -> {
                     PostEntity post = invocation.getArgument(0);
+                    boolean likedByMe = invocation.getArgument(2);
                     return new PostResponse(
                             post.getId(),
                             post.getAuthorId(),
@@ -88,7 +104,9 @@ class PostServiceTest {
                             post.getCreatedAt(),
                             post.getParentId(),
                             post.getRootId(),
-                            post.getReplyCount()
+                            post.getReplyCount(),
+                            post.getLikeCount(),
+                            likedByMe
                     );
                 });
 
@@ -139,9 +157,10 @@ class PostServiceTest {
         when(postRepository.findById(parentId)).thenReturn(Optional.of(parent));
         when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(edgeRepository.save(any(EdgeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo")))
+        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), anyBoolean()))
                 .thenAnswer(invocation -> {
                     PostEntity post = invocation.getArgument(0);
+                    boolean likedByMe = invocation.getArgument(2);
                     return new PostResponse(
                             post.getId(),
                             post.getAuthorId(),
@@ -150,7 +169,9 @@ class PostServiceTest {
                             post.getCreatedAt(),
                             post.getParentId(),
                             post.getRootId(),
-                            post.getReplyCount()
+                            post.getReplyCount(),
+                            post.getLikeCount(),
+                            likedByMe
                     );
                 });
 
@@ -198,10 +219,12 @@ class PostServiceTest {
                 author(authorOneId, "Author One"),
                 author(authorTwoId, "Author Two")
         ));
-        when(postMapper.toResponse(eq(first), eq("Author One"))).thenReturn(toResponse(first, "Author One"));
-        when(postMapper.toResponse(eq(second), eq("Author Two"))).thenReturn(toResponse(second, "Author Two"));
+        when(postMapper.toResponse(eq(first), eq("Author One"), eq(false))).thenReturn(toResponse(first, "Author One", false));
+        when(postMapper.toResponse(eq(second), eq("Author Two"), eq(true))).thenReturn(toResponse(second, "Author Two", true));
+        when(postLikeRepository.findLikedPostIdsByUserIdAndPostIdIn(eq(authorOneId), any()))
+                .thenReturn(Set.of(secondPostId));
 
-        FeedResponse response = postService.getFeed(null, 2);
+        FeedResponse response = postService.getFeed(null, 2, authorOneId);
 
         assertEquals(2, response.items().size());
         assertEquals(firstPostId, response.items().get(0).id());
@@ -222,9 +245,9 @@ class PostServiceTest {
         when(postRepository.findRootPostsAfterCursor(eq(cursorCreatedAt), eq(cursorId), any(Pageable.class)))
                 .thenReturn(List.of(post));
         when(userRepository.findAllById(any())).thenReturn(List.of(author(authorId, "Author One")));
-        when(postMapper.toResponse(eq(post), eq("Author One"))).thenReturn(toResponse(post, "Author One"));
+        when(postMapper.toResponse(eq(post), eq("Author One"), eq(false))).thenReturn(toResponse(post, "Author One", false));
 
-        FeedResponse response = postService.getFeed(cursor, 2);
+        FeedResponse response = postService.getFeed(cursor, 2, null);
 
         assertEquals(1, response.items().size());
         assertEquals(postId, response.items().get(0).id());
@@ -233,8 +256,138 @@ class PostServiceTest {
 
     @Test
     void getFeedThrowsBadRequestWhenCursorIsInvalid() {
-        BadRequestException exception = assertThrows(BadRequestException.class, () -> postService.getFeed("invalid-cursor", 20));
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> postService.getFeed("invalid-cursor", 20, null)
+        );
         assertEquals("Invalid cursor", exception.getMessage());
+    }
+
+    @Test
+    void likePostCreatesLikeAndIncrementsCounter() {
+        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+        UUID authorId = UUID.fromString("338ed4fe-f51d-423d-8fd3-c35c4f740fc7");
+
+        UserEntity user = author(userId, "Viewer");
+        PostEntity post = rootPost(postId, authorId, "post", Instant.parse("2026-02-26T21:10:00Z"));
+        post.setLikeCount(0);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postLikeRepository.existsByPostIdAndUserId(postId, userId)).thenReturn(false);
+        when(postLikeRepository.save(any(PostLikeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(author(authorId, "Author")));
+        when(postMapper.toResponse(eq(post), eq("Author"), eq(true)))
+                .thenAnswer(invocation -> toResponse(post, "Author", true));
+
+        PostResponse response = postService.likePost(userId, postId);
+
+        assertEquals(1, post.getLikeCount());
+        assertEquals(1, response.likeCount());
+        assertEquals(true, response.likedByMe());
+    }
+
+    @Test
+    void unlikePostRemovesLikeAndDecrementsCounter() {
+        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+        UUID authorId = UUID.fromString("338ed4fe-f51d-423d-8fd3-c35c4f740fc7");
+
+        UserEntity user = author(userId, "Viewer");
+        PostEntity post = rootPost(postId, authorId, "post", Instant.parse("2026-02-26T21:10:00Z"));
+        post.setLikeCount(2);
+        PostLikeEntity like = new PostLikeEntity();
+        like.setId(UUID.fromString("11111111-1111-1111-1111-111111111111"));
+        like.setPostId(postId);
+        like.setUserId(userId);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postLikeRepository.findByPostIdAndUserId(postId, userId)).thenReturn(Optional.of(like));
+        when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(author(authorId, "Author")));
+        when(postMapper.toResponse(eq(post), eq("Author"), eq(false)))
+                .thenAnswer(invocation -> toResponse(post, "Author", false));
+
+        PostResponse response = postService.unlikePost(userId, postId);
+
+        assertEquals(1, post.getLikeCount());
+        assertEquals(1, response.likeCount());
+        assertEquals(false, response.likedByMe());
+        verify(postLikeRepository).delete(eq(like));
+    }
+
+    @Test
+    void updatePostThrowsForbiddenWhenActorIsNotAuthor() {
+        UUID actorId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+        UUID authorId = UUID.fromString("338ed4fe-f51d-423d-8fd3-c35c4f740fc7");
+        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+
+        UserEntity actor = author(actorId, "Actor User");
+        PostEntity post = rootPost(postId, authorId, "original", Instant.parse("2026-02-26T21:10:00Z"));
+
+        when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+
+        ForbiddenException exception = assertThrows(
+                ForbiddenException.class,
+                () -> postService.updatePost(actorId, postId, new UpdatePostRequest("updated"))
+        );
+
+        assertEquals("You can only edit your own posts", exception.getMessage());
+        verify(postRepository, never()).save(any(PostEntity.class));
+    }
+
+    @Test
+    void deletePostAllowsModeratorToDeleteOtherAuthorPostWithoutReplies() {
+        UUID modId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+        UUID authorId = UUID.fromString("338ed4fe-f51d-423d-8fd3-c35c4f740fc7");
+        UUID parentId = UUID.fromString("dc4a2480-0619-4512-8733-fb30bcf8dca8");
+        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+
+        UserEntity moderator = author(modId, "Moderator");
+        moderator.setRole(UserRole.MOD);
+        PostEntity post = rootPost(postId, authorId, "reply", Instant.parse("2026-02-26T21:10:00Z"));
+        post.setParentId(parentId);
+
+        PostEntity parent = rootPost(parentId, authorId, "parent", Instant.parse("2026-02-26T21:00:00Z"));
+        parent.setReplyCount(3);
+
+        when(userRepository.findById(modId)).thenReturn(Optional.of(moderator));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.existsByParentId(postId)).thenReturn(false);
+        when(postRepository.findById(parentId)).thenReturn(Optional.of(parent));
+
+        postService.deletePost(modId, postId);
+
+        assertEquals(2, parent.getReplyCount());
+        verify(edgeRepository).deleteBySourcePostId(postId);
+        verify(postLikeRepository).deleteByPostId(postId);
+        verify(postRepository).delete(post);
+        verify(auditLogService).log(eq(modId), eq("POST_DELETED"), eq("POST"), eq(postId), any());
+    }
+
+    @Test
+    void deletePostThrowsConflictWhenPostHasReplies() {
+        UUID authorId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+
+        UserEntity author = author(authorId, "Author");
+        PostEntity post = rootPost(postId, authorId, "root", Instant.parse("2026-02-26T21:10:00Z"));
+
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
+        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.existsByParentId(postId)).thenReturn(true);
+
+        ConflictException exception = assertThrows(
+                ConflictException.class,
+                () -> postService.deletePost(authorId, postId)
+        );
+
+        assertEquals("Cannot delete post with replies", exception.getMessage());
+        verify(postRepository, never()).delete(any(PostEntity.class));
     }
 
     private PostEntity rootPost(UUID id, UUID authorId, String content, Instant createdAt) {
@@ -246,6 +399,7 @@ class PostServiceTest {
         post.setParentId(null);
         post.setRootId(id);
         post.setReplyCount(0);
+        post.setLikeCount(0);
         return post;
     }
 
@@ -255,11 +409,12 @@ class PostServiceTest {
         user.setName(name);
         user.setEmail(name.toLowerCase().replace(" ", "") + "@example.com");
         user.setPasswordHash("hash");
+        user.setRole(UserRole.USER);
         user.setCreatedAt(Instant.parse("2026-02-26T21:10:00Z"));
         return user;
     }
 
-    private PostResponse toResponse(PostEntity post, String authorName) {
+    private PostResponse toResponse(PostEntity post, String authorName, boolean likedByMe) {
         return new PostResponse(
                 post.getId(),
                 post.getAuthorId(),
@@ -268,7 +423,9 @@ class PostServiceTest {
                 post.getCreatedAt(),
                 post.getParentId(),
                 post.getRootId(),
-                post.getReplyCount()
+                post.getReplyCount(),
+                post.getLikeCount(),
+                likedByMe
         );
     }
 

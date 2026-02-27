@@ -11,6 +11,8 @@ public record PostResponse(
         Instant createdAt,
         UUID parentId,
         UUID rootId,
-        int replyCount
+        int replyCount,
+        int likeCount,
+        boolean likedByMe
 ) {
 }

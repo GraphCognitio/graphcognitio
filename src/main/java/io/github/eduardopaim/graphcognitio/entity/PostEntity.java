@@ -33,6 +33,9 @@ public class PostEntity {
     @Column(name = "reply_count", nullable = false)
     private int replyCount;
 
+    @Column(name = "like_count", nullable = false)
+    private int likeCount;
+
     public PostEntity() {
     }
 
@@ -90,6 +93,14 @@ public class PostEntity {
 
     public void setReplyCount(int replyCount) {
         this.replyCount = replyCount;
+    }
+
+    public int getLikeCount() {
+        return likeCount;
+    }
+
+    public void setLikeCount(int likeCount) {
+        this.likeCount = likeCount;
     }
 
     @PrePersist
