@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.eduardopaim.graphcognitio.entity.UserRole;
 import io.github.eduardopaim.graphcognitio.exception.ResourceNotFoundException;
+import io.github.eduardopaim.graphcognitio.idempotency.IdempotencyService;
 import io.github.eduardopaim.graphcognitio.posts.dto.CreatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.dto.PostResponse;
 import io.github.eduardopaim.graphcognitio.posts.dto.UpdatePostRequest;
@@ -53,6 +54,9 @@ class PostControllerWebMvcTest {
     @MockBean
     private PostService postService;
 
+    @MockBean
+    private IdempotencyService idempotencyService;
+
     @Test
     void createPostReturnsCreatedBodyAndLocation() throws Exception {
         UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
@@ -71,7 +75,8 @@ class PostControllerWebMvcTest {
                 0,
                 false
         );
-        when(postService.createRootPost(eq(userId), any(CreatePostRequest.class))).thenReturn(response);
+        when(idempotencyService.execute(eq(userId), any(), eq("/posts"), any(), eq(201), eq(PostResponse.class), any()))
+                .thenReturn(response);
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
                 new AuthenticatedUser(userId, UserRole.USER),
@@ -157,7 +162,15 @@ class PostControllerWebMvcTest {
                 0,
                 false
         );
-        when(postService.createReply(eq(userId), eq(parentId), any(CreatePostRequest.class))).thenReturn(response);
+        when(idempotencyService.execute(
+                eq(userId),
+                any(),
+                eq("/posts/" + parentId + "/reply"),
+                any(),
+                eq(201),
+                eq(PostResponse.class),
+                any())
+        ).thenReturn(response);
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
                 new AuthenticatedUser(userId, UserRole.USER),
@@ -194,7 +207,14 @@ class PostControllerWebMvcTest {
         UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
         UUID parentId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
 
-        when(postService.createReply(eq(userId), eq(parentId), any(CreatePostRequest.class)))
+        when(idempotencyService.execute(
+                eq(userId),
+                any(),
+                eq("/posts/" + parentId + "/reply"),
+                any(),
+                eq(201),
+                eq(PostResponse.class),
+                any()))
                 .thenThrow(new ResourceNotFoundException("Post not found"));
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
@@ -264,7 +284,15 @@ class PostControllerWebMvcTest {
                 1,
                 true
         );
-        when(postService.likePost(userId, postId)).thenReturn(response);
+        when(idempotencyService.execute(
+                eq(userId),
+                any(),
+                eq("/posts/" + postId + "/likes"),
+                any(),
+                eq(200),
+                eq(PostResponse.class),
+                any())
+        ).thenReturn(response);
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
                 new AuthenticatedUser(userId, UserRole.USER),
@@ -302,7 +330,15 @@ class PostControllerWebMvcTest {
                 0,
                 false
         );
-        when(postService.unlikePost(userId, postId)).thenReturn(response);
+        when(idempotencyService.execute(
+                eq(userId),
+                any(),
+                eq("/posts/" + postId + "/likes"),
+                any(),
+                eq(200),
+                eq(PostResponse.class),
+                any())
+        ).thenReturn(response);
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
                 new AuthenticatedUser(userId, UserRole.USER),

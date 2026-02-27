@@ -38,6 +38,9 @@ app:
     likes:
       limit: ${APP_RATE_LIMIT_LIKES_LIMIT:120}
       window-seconds: ${APP_RATE_LIMIT_LIKES_WINDOW_SECONDS:60}
+  idempotency:
+    enabled: ${APP_IDEMPOTENCY_ENABLED:true}
+    ttl-minutes: ${APP_IDEMPOTENCY_TTL_MINUTES:120}
 
 management:
   endpoints:

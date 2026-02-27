@@ -64,6 +64,8 @@ cp .env.example .env
 - `APP_BOOTSTRAP_ADMIN_EMAIL` (optional; promotes matching user to `ADMIN` during Flyway migration)
 - `APP_RATE_LIMIT_ENABLED` (optional, default `true`)
 - `APP_RATE_LIMIT_*` tuning variables for each protected route group (see `.env.example`)
+- `APP_IDEMPOTENCY_ENABLED` (optional, default `true`)
+- `APP_IDEMPOTENCY_TTL_MINUTES` (optional, default `120`)
 
 ## Running Locally
 
@@ -100,6 +102,12 @@ docker compose up -d postgres
 - `GET /posts/{id}`
 - `PATCH /posts/{id}` (author-only edit)
 - `DELETE /posts/{id}` (author delete, or `MOD`/`ADMIN` moderation delete)
+- `POST /posts/{id}/likes`
+- `DELETE /posts/{id}/likes`
+
+Idempotency support (`Idempotency-Key` header, optional) is available for:
+- `POST /posts`
+- `POST /posts/{id}/reply`
 - `POST /posts/{id}/likes`
 - `DELETE /posts/{id}/likes`
 
@@ -175,7 +183,17 @@ When a limit is exceeded, API returns:
   - `userId` (when request is authenticated)
 - Custom HTTP metrics:
   - `graphcognitio.http.server.latency` (timer by method/uri/status)
-  - `graphcognitio.http.server.errors` (counter by method/uri/statusClass)
+- `graphcognitio.http.server.errors` (counter by method/uri/statusClass)
+
+## Idempotency
+
+- Header: `Idempotency-Key`
+- Scope: per user + endpoint + payload hash
+- Storage: `idempotency_keys` table with TTL (`expires_at`)
+- Behavior:
+  - repeated request with same key and same payload returns stored response
+  - same key with different payload returns `409 Conflict`
+  - expired key is discarded and request executes again
 
 ## Testing
 
@@ -217,7 +235,6 @@ Primary risks and current controls:
 
 Residual risks for next hardening phase:
 
-- Missing idempotency keys for write operations
 - Missing caching strategy for feed/graph hot paths
 - Missing full-text search and ranking
 - Missing security automation in CI (SCA/CodeQL)
