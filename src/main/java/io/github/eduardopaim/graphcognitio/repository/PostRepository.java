@@ -2,6 +2,7 @@ package io.github.eduardopaim.graphcognitio.repository;
 
 import io.github.eduardopaim.graphcognitio.entity.PostEntity;
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +39,56 @@ public interface PostRepository extends JpaRepository<PostEntity, UUID> {
     List<PostEntity> findRootPostsAfterCursor(@Param("cursorCreatedAt") Instant cursorCreatedAt,
                                               @Param("cursorId") UUID cursorId,
                                               Pageable pageable);
+
+    @Query(value = """
+            WITH ranked_posts AS (
+                SELECT
+                    p.id AS "id",
+                    p.author_id AS "authorId",
+                    p.content AS "content",
+                    p.created_at AS "createdAt",
+                    p.parent_id AS "parentId",
+                    p.root_id AS "rootId",
+                    p.reply_count AS "replyCount",
+                    p.like_count AS "likeCount",
+                    ROUND((
+                        ts_rank_cd(p.search_vector, plainto_tsquery('simple', :query))
+                        + (LEAST(p.like_count, 20) * 0.05)
+                        + (LEAST(p.reply_count, 20) * 0.03)
+                    )::numeric, 8) AS "searchScore"
+                FROM posts p
+                WHERE p.search_vector @@ plainto_tsquery('simple', :query)
+            )
+            SELECT
+                rp."id",
+                rp."authorId",
+                rp."content",
+                rp."createdAt",
+                rp."parentId",
+                rp."rootId",
+                rp."replyCount",
+                rp."likeCount",
+                rp."searchScore"
+            FROM ranked_posts rp
+            WHERE (
+                :cursorScore IS NULL
+                OR rp."searchScore" < :cursorScore
+                OR (
+                    rp."searchScore" = :cursorScore
+                    AND (
+                        rp."createdAt" < :cursorCreatedAt
+                        OR (rp."createdAt" = :cursorCreatedAt AND rp."id" < :cursorId)
+                    )
+                )
+            )
+            ORDER BY rp."searchScore" DESC, rp."createdAt" DESC, rp."id" DESC
+            LIMIT :pageSize
+            """, nativeQuery = true)
+    List<PostSearchProjection> searchPosts(@Param("query") String query,
+                                           @Param("cursorScore") BigDecimal cursorScore,
+                                           @Param("cursorCreatedAt") Instant cursorCreatedAt,
+                                           @Param("cursorId") UUID cursorId,
+                                           @Param("pageSize") int pageSize);
 
     boolean existsByParentId(UUID parentId);
 }

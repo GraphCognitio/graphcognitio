@@ -127,6 +127,14 @@ Delete constraint:
 - stable ordering: `created_at DESC, id DESC`
 - cursor format: URL-safe Base64 of `createdAt|id`
 
+### Search
+
+- `GET /search?q=&cursor=&limit=`
+- response shape matches feed: `{ items, nextCursor }`
+- PostgreSQL full-text search over post content
+- ranking order: `searchScore DESC, created_at DESC, id DESC`
+- search cursor format: URL-safe Base64 of `searchScore|createdAt|id`
+
 ### Graph
 
 - `GET /graphs/conversation/{rootId}?depth=&limit=`
@@ -210,6 +218,17 @@ When a limit is exceeded, API returns:
   - `cache.gets` with `cache=feedCache|graphCache` and `result=hit|miss`
   - `cache.puts` and `cache.evictions` for cache behavior tracking
 
+## Search Ranking
+
+- Full-text index: generated `tsvector` column (`search_vector`) with GIN index
+- Query parser: `plainto_tsquery('simple', q)`
+- Score formula:
+  - `ts_rank_cd(search_vector, tsquery)`
+  - `+ like_count` bonus (capped)
+  - `+ reply_count` bonus (capped)
+- Recency is applied as secondary ordering with `created_at DESC`
+- Search cursor uses `(searchScore, createdAt, id)` to keep pagination stable
+
 ## Testing
 
 Test suite includes:
@@ -250,5 +269,4 @@ Primary risks and current controls:
 
 Residual risks for next hardening phase:
 
-- Missing full-text search and ranking
 - Missing security automation in CI (SCA/CodeQL)
