@@ -54,6 +54,12 @@ Create a local `.env` from `.env.example`:
 cp .env.example .env
 ```
 
+Important:
+
+- `.env.example` is intentionally placeholder-based
+- replace every placeholder locally before running the app
+- never commit real secrets, production URLs, or production credentials
+
 `application.yml` expects:
 
 - `SPRING_DATASOURCE_URL`
@@ -71,6 +77,7 @@ cp .env.example .env
 - `ENABLE_SEARCH` (optional, default `true`)
 - `ENABLE_GRAPH_EXPAND` (optional, default `true`)
 - `APP_CORS_ALLOWED_ORIGINS` (required in prod; comma-separated origins for browser access)
+- `APP_PUBLIC_OBSERVABILITY_ENABLED` (optional; defaults to `true` in `dev`/`test`, `false` in `prod`)
 
 ## Running Locally
 
@@ -82,10 +89,10 @@ docker compose up -d postgres
 
 2. Export environment variables from `.env` in your shell (or use your preferred loader).
 
-3. Start the API:
+3. Run with the `dev` profile explicitly:
 
 ```bash
-./mvnw spring-boot:run
+SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run
 ```
 
 4. Open API docs:
@@ -95,7 +102,8 @@ docker compose up -d postgres
 
 Profiles:
 
-- default profile: `dev`
+- no default runtime profile is forced
+- set `SPRING_PROFILES_ACTIVE=dev` for local development
 - `application-dev.yml`: local-friendly docs enabled
 - `application-test.yml`: docs disabled for test runs, local CORS allowed by default
 - `application-prod.yml`: docs disabled by default unless explicitly enabled, no default CORS origin
@@ -169,6 +177,7 @@ Delete constraint:
 - JWT payload includes role claim used by the API authorization context
 - Validation and domain errors are returned as RFC 7807 `application/problem+json`
 - CORS allowed origins are environment-driven through `APP_CORS_ALLOWED_ORIGINS`
+- public metrics/prometheus exposure is disabled by default in `prod`
 - Security headers enabled:
   - `X-Content-Type-Options: nosniff`
   - `X-Frame-Options: DENY`
@@ -203,6 +212,7 @@ When a limit is exceeded, API returns:
 ## Observability
 
 - Actuator endpoints enabled: `health`, `metrics`, `prometheus`
+- In `prod`, only `health` stays public by default; `metrics` and `prometheus` require an authenticated `ADMIN` unless `APP_PUBLIC_OBSERVABILITY_ENABLED=true`
 - Structured JSON logging enabled for console output
 - Correlation header: `X-Request-Id` (accepted from client or generated)
 - MDC fields included in logs:

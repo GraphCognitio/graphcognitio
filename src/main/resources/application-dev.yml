@@ -2,6 +2,8 @@ app:
   security:
     cors:
       allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    public-observability:
+      enabled: ${APP_PUBLIC_OBSERVABILITY_ENABLED:true}
 
 springdoc:
   api-docs:

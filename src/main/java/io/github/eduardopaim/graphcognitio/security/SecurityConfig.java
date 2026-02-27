@@ -9,6 +9,7 @@ import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -26,6 +27,12 @@ import org.springframework.util.StringUtils;
 
 @Configuration
 public class SecurityConfig {
+
+    private final boolean publicObservabilityEnabled;
+
+    public SecurityConfig(@Value("${app.security.public-observability.enabled:false}") boolean publicObservabilityEnabled) {
+        this.publicObservabilityEnabled = publicObservabilityEnabled;
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
@@ -58,12 +65,17 @@ public class SecurityConfig {
                             .maxAgeInSeconds(31536000)
                     );
                 })
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/auth/register", "/auth/login").permitAll()
-                        .requestMatchers("/actuator/health/**", "/actuator/metrics/**", "/actuator/prometheus").permitAll()
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .anyRequest().authenticated()
-                )
+                .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers(HttpMethod.POST, "/auth/register", "/auth/login").permitAll();
+                    auth.requestMatchers("/actuator/health/**").permitAll();
+                    if (publicObservabilityEnabled) {
+                        auth.requestMatchers("/actuator/metrics/**", "/actuator/prometheus").permitAll();
+                    } else {
+                        auth.requestMatchers("/actuator/metrics/**", "/actuator/prometheus").hasRole("ADMIN");
+                    }
+                    auth.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
+                    auth.anyRequest().authenticated();
+                })
                 .addFilterBefore(requestCorrelationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(httpMetricsFilter, RequestCorrelationFilter.class)
                 .addFilterAfter(jwtAuthenticationFilter, HttpMetricsFilter.class)

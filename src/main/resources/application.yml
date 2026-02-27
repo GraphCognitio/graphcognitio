@@ -1,6 +1,4 @@
 spring:
-  profiles:
-    default: dev
   application:
     name: graphcognitio
   datasource:
@@ -29,6 +27,9 @@ app:
   jwt:
     secret: ${APP_JWT_SECRET}
     exp-minutes: ${APP_JWT_EXP_MINUTES:60}
+  security:
+    public-observability:
+      enabled: ${APP_PUBLIC_OBSERVABILITY_ENABLED:false}
   rate-limit:
     enabled: ${APP_RATE_LIMIT_ENABLED:true}
     auth-register:
