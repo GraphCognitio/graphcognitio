@@ -6,6 +6,7 @@ import io.github.eduardopaim.graphcognitio.security.AuthenticatedUser;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.util.UUID;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Validated
 @RestController
+@ConditionalOnProperty(prefix = "app.features", name = "search-enabled", havingValue = "true", matchIfMissing = true)
 public class SearchController {
 
     private final SearchService searchService;

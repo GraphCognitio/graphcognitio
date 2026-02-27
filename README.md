@@ -68,6 +68,8 @@ cp .env.example .env
 - `APP_IDEMPOTENCY_TTL_MINUTES` (optional, default `120`)
 - `APP_CACHE_MAX_SIZE` (optional, default `1000`)
 - `APP_CACHE_TTL_SECONDS` (optional, default `30`)
+- `ENABLE_SEARCH` (optional, default `true`)
+- `ENABLE_GRAPH_EXPAND` (optional, default `true`)
 
 ## Running Locally
 
@@ -89,6 +91,13 @@ docker compose up -d postgres
 
 - `http://localhost:8080/swagger-ui/index.html`
 - `http://localhost:8080/v3/api-docs`
+
+Profiles:
+
+- default profile: `dev`
+- `application-dev.yml`: local-friendly docs enabled
+- `application-test.yml`: docs disabled for test runs
+- `application-prod.yml`: docs disabled by default unless explicitly enabled
 
 ## API Surface
 
@@ -228,6 +237,14 @@ When a limit is exceeded, API returns:
   - `+ reply_count` bonus (capped)
 - Recency is applied as secondary ordering with `created_at DESC`
 - Search cursor uses `(searchScore, createdAt, id)` to keep pagination stable
+
+## Feature Flags
+
+- `ENABLE_SEARCH=false`
+  - `/search` is not registered and returns `404 Not Found`
+- `ENABLE_GRAPH_EXPAND=false`
+  - `/graphs/conversation/{rootId}` still works with the default depth
+  - requests with `depth > 2` return `400 Bad Request`
 
 ## Testing
 

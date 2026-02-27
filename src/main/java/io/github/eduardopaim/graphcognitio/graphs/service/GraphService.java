@@ -1,7 +1,9 @@
 package io.github.eduardopaim.graphcognitio.graphs.service;
 
+import io.github.eduardopaim.graphcognitio.config.FeatureFlagsProperties;
 import io.github.eduardopaim.graphcognitio.entity.EdgeEntity;
 import io.github.eduardopaim.graphcognitio.entity.PostEntity;
+import io.github.eduardopaim.graphcognitio.exception.BadRequestException;
 import io.github.eduardopaim.graphcognitio.exception.ResourceNotFoundException;
 import io.github.eduardopaim.graphcognitio.graphs.dto.ConversationEdgeResponse;
 import io.github.eduardopaim.graphcognitio.graphs.dto.ConversationGraphResponse;
@@ -29,13 +31,16 @@ public class GraphService {
     private final PostRepository postRepository;
     private final EdgeRepository edgeRepository;
     private final UserRepository userRepository;
+    private final FeatureFlagsProperties featureFlagsProperties;
 
     public GraphService(PostRepository postRepository,
                         EdgeRepository edgeRepository,
-                        UserRepository userRepository) {
+                        UserRepository userRepository,
+                        FeatureFlagsProperties featureFlagsProperties) {
         this.postRepository = postRepository;
         this.edgeRepository = edgeRepository;
         this.userRepository = userRepository;
+        this.featureFlagsProperties = featureFlagsProperties;
     }
 
     @Transactional(readOnly = true)
@@ -44,6 +49,10 @@ public class GraphService {
             key = "T(io.github.eduardopaim.graphcognitio.cache.CacheKeys).graph(#rootId, #depth, #limit)"
     )
     public ConversationGraphResponse getConversationGraph(UUID rootId, int depth, int limit) {
+        if (depth > 2 && !featureFlagsProperties.isGraphExpandEnabled()) {
+            throw new BadRequestException("Graph expand feature is disabled");
+        }
+
         PostEntity root = postRepository.findByIdAndParentIdIsNull(rootId)
                 .orElseThrow(() -> new ResourceNotFoundException("Root post not found"));
 

@@ -1,4 +1,6 @@
 spring:
+  profiles:
+    default: dev
   application:
     name: graphcognitio
   datasource:
@@ -6,6 +8,7 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:graphcognitio}
     password: ${SPRING_DATASOURCE_PASSWORD}
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
     properties:
@@ -46,6 +49,9 @@ app:
   idempotency:
     enabled: ${APP_IDEMPOTENCY_ENABLED:true}
     ttl-minutes: ${APP_IDEMPOTENCY_TTL_MINUTES:120}
+  features:
+    search-enabled: ${ENABLE_SEARCH:true}
+    graph-expand-enabled: ${ENABLE_GRAPH_EXPAND:true}
 
 management:
   endpoints:
