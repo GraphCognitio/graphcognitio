@@ -31,7 +31,6 @@ The code follows a layered structure:
 
 ## Domain Model
 
-- `users`
 - `users` (`role`: `USER`, `MOD`, `ADMIN`)
 - `posts` (`parent_id`, `root_id`, `reply_count`, `like_count`)
 - `edges` (`source_post_id`, `target_post_id`, `type=REPLY`)
@@ -63,6 +62,8 @@ cp .env.example .env
 - `APP_JWT_SECRET` (required)
 - `APP_JWT_EXP_MINUTES` (optional, default `60`)
 - `APP_BOOTSTRAP_ADMIN_EMAIL` (optional; promotes matching user to `ADMIN` during Flyway migration)
+- `APP_RATE_LIMIT_ENABLED` (optional, default `true`)
+- `APP_RATE_LIMIT_*` tuning variables for each protected route group (see `.env.example`)
 
 ## Running Locally
 
@@ -142,6 +143,22 @@ Delete constraint:
 
 All role updates and write operations are auditable via `audit_log`.
 
+## Rate Limiting
+
+In-memory fixed-window rate limiting is applied by endpoint category:
+
+- `POST /auth/register` (anti-abuse)
+- `POST /auth/login` (anti brute-force)
+- `POST /posts`
+- `POST /posts/{id}/reply`
+- `POST|DELETE /posts/{id}/likes`
+
+When a limit is exceeded, API returns:
+
+- status `429 Too Many Requests`
+- RFC 7807 body (`application/problem+json`)
+- headers: `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+
 ## Testing
 
 Test suite includes:
@@ -182,7 +199,7 @@ Primary risks and current controls:
 
 Residual risks for next hardening phase:
 
-- Missing RBAC and ownership enforcement for moderation/admin flows
-- Missing rate limiting and brute-force protections
-- Missing audit logging and idempotency controls
+- Missing idempotency keys for write operations
+- Missing caching strategy for feed/graph hot paths
+- Missing full-text search and ranking
 - Missing security automation in CI (SCA/CodeQL)

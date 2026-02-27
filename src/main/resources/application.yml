@@ -21,3 +21,20 @@ app:
   jwt:
     secret: ${APP_JWT_SECRET}
     exp-minutes: ${APP_JWT_EXP_MINUTES:60}
+  rate-limit:
+    enabled: ${APP_RATE_LIMIT_ENABLED:true}
+    auth-register:
+      limit: ${APP_RATE_LIMIT_AUTH_REGISTER_LIMIT:5}
+      window-seconds: ${APP_RATE_LIMIT_AUTH_REGISTER_WINDOW_SECONDS:60}
+    auth-login:
+      limit: ${APP_RATE_LIMIT_AUTH_LOGIN_LIMIT:10}
+      window-seconds: ${APP_RATE_LIMIT_AUTH_LOGIN_WINDOW_SECONDS:60}
+    create-post:
+      limit: ${APP_RATE_LIMIT_CREATE_POST_LIMIT:20}
+      window-seconds: ${APP_RATE_LIMIT_CREATE_POST_WINDOW_SECONDS:60}
+    create-reply:
+      limit: ${APP_RATE_LIMIT_CREATE_REPLY_LIMIT:40}
+      window-seconds: ${APP_RATE_LIMIT_CREATE_REPLY_WINDOW_SECONDS:60}
+    likes:
+      limit: ${APP_RATE_LIMIT_LIKES_LIMIT:120}
+      window-seconds: ${APP_RATE_LIMIT_LIKES_WINDOW_SECONDS:60}
