@@ -3,6 +3,7 @@ package io.github.eduardopaim.graphcognitio.posts.service;
 import io.github.eduardopaim.graphcognitio.entity.EdgeEntity;
 import io.github.eduardopaim.graphcognitio.entity.EdgeType;
 import io.github.eduardopaim.graphcognitio.entity.PostEntity;
+import io.github.eduardopaim.graphcognitio.entity.PostLikeEntity;
 import io.github.eduardopaim.graphcognitio.entity.UserEntity;
 import io.github.eduardopaim.graphcognitio.exception.BadRequestException;
 import io.github.eduardopaim.graphcognitio.exception.ResourceNotFoundException;
@@ -12,6 +13,7 @@ import io.github.eduardopaim.graphcognitio.posts.dto.FeedResponse;
 import io.github.eduardopaim.graphcognitio.posts.dto.PostResponse;
 import io.github.eduardopaim.graphcognitio.posts.mapper.PostMapper;
 import io.github.eduardopaim.graphcognitio.repository.EdgeRepository;
+import io.github.eduardopaim.graphcognitio.repository.PostLikeRepository;
 import io.github.eduardopaim.graphcognitio.repository.PostRepository;
 import io.github.eduardopaim.graphcognitio.repository.UserRepository;
 import java.nio.charset.StandardCharsets;
@@ -36,15 +38,18 @@ public class PostService {
     private final PostRepository postRepository;
     private final UserRepository userRepository;
     private final EdgeRepository edgeRepository;
+    private final PostLikeRepository postLikeRepository;
     private final PostMapper postMapper;
 
     public PostService(PostRepository postRepository,
                        UserRepository userRepository,
                        EdgeRepository edgeRepository,
+                       PostLikeRepository postLikeRepository,
                        PostMapper postMapper) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.edgeRepository = edgeRepository;
+        this.postLikeRepository = postLikeRepository;
         this.postMapper = postMapper;
     }
 
@@ -62,9 +67,10 @@ public class PostService {
         post.setParentId(null);
         post.setRootId(postId);
         post.setReplyCount(0);
+        post.setLikeCount(0);
 
         PostEntity saved = postRepository.save(post);
-        return postMapper.toResponse(saved, author.getName());
+        return postMapper.toResponse(saved, author.getName(), false);
     }
 
     @Transactional
@@ -83,6 +89,7 @@ public class PostService {
         replyPost.setParentId(parentPost.getId());
         replyPost.setRootId(resolveRootId(parentPost));
         replyPost.setReplyCount(0);
+        replyPost.setLikeCount(0);
 
         PostEntity savedReply = postRepository.save(replyPost);
 
@@ -96,11 +103,11 @@ public class PostService {
         edge.setCreatedAt(Instant.now());
         edgeRepository.save(edge);
 
-        return postMapper.toResponse(savedReply, author.getName());
+        return postMapper.toResponse(savedReply, author.getName(), false);
     }
 
     @Transactional(readOnly = true)
-    public PostResponse getPostById(UUID postId) {
+    public PostResponse getPostById(UUID postId, UUID viewerId) {
         PostEntity post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
@@ -108,11 +115,12 @@ public class PostService {
                 .map(UserEntity::getName)
                 .orElseThrow(() -> new ResourceNotFoundException("Author not found"));
 
-        return postMapper.toResponse(post, authorName);
+        boolean likedByMe = viewerId != null && postLikeRepository.existsByPostIdAndUserId(postId, viewerId);
+        return postMapper.toResponse(post, authorName, likedByMe);
     }
 
     @Transactional(readOnly = true)
-    public FeedResponse getFeed(String cursor, int limit) {
+    public FeedResponse getFeed(String cursor, int limit, UUID viewerId) {
         CursorKey cursorKey = decodeCursor(cursor);
         Pageable pageable = PageRequest.of(0, limit + 1);
 
@@ -130,8 +138,13 @@ public class PostService {
         boolean hasMore = page.size() > limit;
         List<PostEntity> currentItems = hasMore ? new ArrayList<>(page.subList(0, limit)) : page;
         Map<UUID, String> authorNames = loadAuthorNames(currentItems);
+        Set<UUID> likedPostIds = loadLikedPostIds(viewerId, currentItems);
         List<PostResponse> items = currentItems.stream()
-                .map(post -> postMapper.toResponse(post, authorNames.get(post.getAuthorId())))
+                .map(post -> postMapper.toResponse(
+                        post,
+                        authorNames.get(post.getAuthorId()),
+                        likedPostIds.contains(post.getId())
+                ))
                 .toList();
 
         String nextCursor = null;
@@ -141,6 +154,48 @@ public class PostService {
         }
 
         return new FeedResponse(items, nextCursor);
+    }
+
+    @Transactional
+    public PostResponse likePost(UUID userId, UUID postId) {
+        userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Authenticated user not found"));
+
+        PostEntity post = postRepository.findById(postId)
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+        boolean alreadyLiked = postLikeRepository.existsByPostIdAndUserId(postId, userId);
+        if (!alreadyLiked) {
+            PostLikeEntity postLike = new PostLikeEntity();
+            postLike.setPostId(postId);
+            postLike.setUserId(userId);
+            postLike.setCreatedAt(Instant.now());
+            postLikeRepository.save(postLike);
+
+            post.setLikeCount(post.getLikeCount() + 1);
+            postRepository.save(post);
+        }
+
+        String authorName = findAuthorName(post.getAuthorId());
+        return postMapper.toResponse(post, authorName, true);
+    }
+
+    @Transactional
+    public PostResponse unlikePost(UUID userId, UUID postId) {
+        userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Authenticated user not found"));
+
+        PostEntity post = postRepository.findById(postId)
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+        postLikeRepository.findByPostIdAndUserId(postId, userId).ifPresent(existingLike -> {
+            postLikeRepository.delete(existingLike);
+            post.setLikeCount(Math.max(0, post.getLikeCount() - 1));
+            postRepository.save(post);
+        });
+
+        String authorName = findAuthorName(post.getAuthorId());
+        return postMapper.toResponse(post, authorName, false);
     }
 
     private UUID resolveRootId(PostEntity parentPost) {
@@ -164,6 +219,24 @@ public class PostService {
             }
         }
         return authorNames;
+    }
+
+    private Set<UUID> loadLikedPostIds(UUID viewerId, List<PostEntity> posts) {
+        if (viewerId == null || posts.isEmpty()) {
+            return Set.of();
+        }
+
+        Set<UUID> postIds = posts.stream()
+                .map(PostEntity::getId)
+                .collect(Collectors.toSet());
+
+        return postLikeRepository.findLikedPostIdsByUserIdAndPostIdIn(viewerId, postIds);
+    }
+
+    private String findAuthorName(UUID authorId) {
+        return userRepository.findById(authorId)
+                .map(UserEntity::getName)
+                .orElseThrow(() -> new ResourceNotFoundException("Author not found"));
     }
 
     private CursorKey decodeCursor(String cursor) {

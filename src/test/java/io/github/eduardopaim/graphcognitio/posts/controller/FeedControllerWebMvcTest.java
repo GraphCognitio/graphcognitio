@@ -42,10 +42,10 @@ class FeedControllerWebMvcTest {
         Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
 
         FeedResponse response = new FeedResponse(
-                List.of(new PostResponse(postId, authorId, "Eduardo", "root post", createdAt, null, postId, 0)),
+                List.of(new PostResponse(postId, authorId, "Eduardo", "root post", createdAt, null, postId, 0, 3, true)),
                 "MjAyNi0wMi0yNlQyMToxMDowMFp8MmZiZjhmMjItNTQ4NS00Zjk1LWE5YzAtMTcyM2E0OWJmZDdj"
         );
-        when(postService.getFeed(null, 20)).thenReturn(response);
+        when(postService.getFeed(null, 20, null)).thenReturn(response);
 
         mockMvc.perform(get("/feed"))
                 .andExpect(status().isOk())
@@ -58,13 +58,15 @@ class FeedControllerWebMvcTest {
                 .andExpect(jsonPath("$.items[0].parentId").doesNotExist())
                 .andExpect(jsonPath("$.items[0].rootId").value(postId.toString()))
                 .andExpect(jsonPath("$.items[0].replyCount").value(0))
+                .andExpect(jsonPath("$.items[0].likeCount").value(3))
+                .andExpect(jsonPath("$.items[0].likedByMe").value(true))
                 .andExpect(jsonPath("$.nextCursor").value(response.nextCursor()));
     }
 
     @Test
     void getFeedReturnsNullNextCursorWhenFinished() throws Exception {
         FeedResponse response = new FeedResponse(List.of(), null);
-        when(postService.getFeed(null, 20)).thenReturn(response);
+        when(postService.getFeed(null, 20, null)).thenReturn(response);
 
         mockMvc.perform(get("/feed"))
                 .andExpect(status().isOk())

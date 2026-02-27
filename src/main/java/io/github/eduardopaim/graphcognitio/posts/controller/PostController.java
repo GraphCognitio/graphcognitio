@@ -10,6 +10,7 @@ import java.net.URI;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -60,7 +61,29 @@ public class PostController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<PostResponse> getPost(@PathVariable UUID id) {
-        return ResponseEntity.ok(postService.getPostById(id));
+    public ResponseEntity<PostResponse> getPost(@AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+                                                @PathVariable UUID id) {
+        UUID viewerId = authenticatedUser == null ? null : authenticatedUser.userId();
+        return ResponseEntity.ok(postService.getPostById(id, viewerId));
+    }
+
+    @PostMapping("/{id}/likes")
+    public ResponseEntity<PostResponse> likePost(@AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+                                                 @PathVariable UUID id) {
+        if (authenticatedUser == null) {
+            throw new UnauthorizedException("Unauthorized");
+        }
+
+        return ResponseEntity.ok(postService.likePost(authenticatedUser.userId(), id));
+    }
+
+    @DeleteMapping("/{id}/likes")
+    public ResponseEntity<PostResponse> unlikePost(@AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+                                                   @PathVariable UUID id) {
+        if (authenticatedUser == null) {
+            throw new UnauthorizedException("Unauthorized");
+        }
+
+        return ResponseEntity.ok(postService.unlikePost(authenticatedUser.userId(), id));
     }
 }

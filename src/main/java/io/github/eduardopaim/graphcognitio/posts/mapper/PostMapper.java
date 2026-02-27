@@ -9,5 +9,6 @@ import org.mapstruct.Mapping;
 public interface PostMapper {
 
     @Mapping(target = "authorName", source = "authorName")
-    PostResponse toResponse(PostEntity post, String authorName);
+    @Mapping(target = "likedByMe", source = "likedByMe")
+    PostResponse toResponse(PostEntity post, String authorName, boolean likedByMe);
 }

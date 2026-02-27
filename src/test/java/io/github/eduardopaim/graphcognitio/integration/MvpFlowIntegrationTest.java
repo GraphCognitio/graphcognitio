@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -115,6 +116,8 @@ class MvpFlowIntegrationTest {
         String rootId = rootPostJson.get("id").asText();
         assertEquals(rootId, rootPostJson.get("rootId").asText());
         assertTrue(rootPostJson.get("parentId").isNull());
+        assertEquals(0, rootPostJson.get("likeCount").asInt());
+        assertEquals(false, rootPostJson.get("likedByMe").asBoolean());
 
         MvcResult replyResult = mockMvc.perform(post("/posts/{id}/reply", rootId)
                         .header(AUTHORIZATION, bearer(accessToken))
@@ -140,6 +143,24 @@ class MvpFlowIntegrationTest {
 
         JsonNode rootDetailJson = readJson(rootDetailResult);
         assertEquals(1, rootDetailJson.get("replyCount").asInt());
+
+        MvcResult likeResult = mockMvc.perform(post("/posts/{id}/likes", rootId)
+                        .header(AUTHORIZATION, bearer(accessToken)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode likeJson = readJson(likeResult);
+        assertEquals(1, likeJson.get("likeCount").asInt());
+        assertEquals(true, likeJson.get("likedByMe").asBoolean());
+
+        MvcResult unlikeResult = mockMvc.perform(delete("/posts/{id}/likes", rootId)
+                        .header(AUTHORIZATION, bearer(accessToken)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode unlikeJson = readJson(unlikeResult);
+        assertEquals(0, unlikeJson.get("likeCount").asInt());
+        assertEquals(false, unlikeJson.get("likedByMe").asBoolean());
 
         MvcResult feedResult = mockMvc.perform(get("/feed")
                         .header(AUTHORIZATION, bearer(accessToken))
