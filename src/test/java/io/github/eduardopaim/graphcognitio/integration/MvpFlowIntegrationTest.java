@@ -81,6 +81,7 @@ class MvpFlowIntegrationTest {
         JsonNode registerJson = readJson(registerResult);
         assertNotNull(registerJson.get("accessToken").asText());
         assertEquals(email, registerJson.get("user").get("email").asText());
+        assertEquals("USER", registerJson.get("user").get("role").asText());
 
         String loginPayload = """
                 {
@@ -99,6 +100,7 @@ class MvpFlowIntegrationTest {
         String accessToken = loginJson.get("accessToken").asText();
         assertNotNull(accessToken);
         assertTrue(!accessToken.isBlank());
+        assertEquals("USER", loginJson.get("user").get("role").asText());
 
         MvcResult createPostResult = mockMvc.perform(post("/posts")
                         .header(AUTHORIZATION, bearer(accessToken))

@@ -3,6 +3,7 @@ package io.github.eduardopaim.graphcognitio.posts.controller;
 import io.github.eduardopaim.graphcognitio.exception.UnauthorizedException;
 import io.github.eduardopaim.graphcognitio.posts.dto.CreatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.dto.PostResponse;
+import io.github.eduardopaim.graphcognitio.posts.dto.UpdatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.service.PostService;
 import io.github.eduardopaim.graphcognitio.security.AuthenticatedUser;
 import jakarta.validation.Valid;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -65,6 +67,26 @@ public class PostController {
                                                 @PathVariable UUID id) {
         UUID viewerId = authenticatedUser == null ? null : authenticatedUser.userId();
         return ResponseEntity.ok(postService.getPostById(id, viewerId));
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<PostResponse> updatePost(@AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+                                                   @PathVariable UUID id,
+                                                   @Valid @RequestBody UpdatePostRequest request) {
+        if (authenticatedUser == null) {
+            throw new UnauthorizedException("Unauthorized");
+        }
+        return ResponseEntity.ok(postService.updatePost(authenticatedUser.userId(), id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deletePost(@AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+                                           @PathVariable UUID id) {
+        if (authenticatedUser == null) {
+            throw new UnauthorizedException("Unauthorized");
+        }
+        postService.deletePost(authenticatedUser.userId(), id);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/likes")

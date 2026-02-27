@@ -6,6 +6,7 @@ import io.github.eduardopaim.graphcognitio.auth.dto.LoginRequest;
 import io.github.eduardopaim.graphcognitio.auth.dto.RegisterRequest;
 import io.github.eduardopaim.graphcognitio.auth.mapper.AuthUserMapper;
 import io.github.eduardopaim.graphcognitio.entity.UserEntity;
+import io.github.eduardopaim.graphcognitio.entity.UserRole;
 import io.github.eduardopaim.graphcognitio.exception.ConflictException;
 import io.github.eduardopaim.graphcognitio.exception.UnauthorizedException;
 import io.github.eduardopaim.graphcognitio.repository.UserRepository;
@@ -48,10 +49,11 @@ public class AuthService {
         user.setName(request.name().trim());
         user.setEmail(normalizedEmail);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setRole(UserRole.USER);
         user.setCreatedAt(Instant.now());
 
         UserEntity savedUser = userRepository.save(user);
-        String accessToken = jwtService.generateAccessToken(savedUser.getId(), savedUser.getEmail());
+        String accessToken = jwtService.generateAccessToken(savedUser.getId(), savedUser.getEmail(), savedUser.getRole());
         AuthUserResponse userResponse = authUserMapper.toResponse(savedUser);
 
         return new AuthResponse(accessToken, userResponse);
@@ -68,7 +70,7 @@ public class AuthService {
             throw new UnauthorizedException("Invalid email or password");
         }
 
-        String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail());
+        String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
         AuthUserResponse userResponse = authUserMapper.toResponse(user);
 
         return new AuthResponse(accessToken, userResponse);

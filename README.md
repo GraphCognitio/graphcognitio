@@ -32,9 +32,11 @@ The code follows a layered structure:
 ## Domain Model
 
 - `users`
+- `users` (`role`: `USER`, `MOD`, `ADMIN`)
 - `posts` (`parent_id`, `root_id`, `reply_count`, `like_count`)
 - `edges` (`source_post_id`, `target_post_id`, `type=REPLY`)
 - `post_likes` (unique `post_id + user_id`)
+- `audit_log` (`actor_user_id`, `action`, `entity_type`, `entity_id`, `metadata`, `created_at`)
 
 Core rules:
 
@@ -60,6 +62,7 @@ cp .env.example .env
 - `SPRING_DATASOURCE_PASSWORD`
 - `APP_JWT_SECRET` (required)
 - `APP_JWT_EXP_MINUTES` (optional, default `60`)
+- `APP_BOOTSTRAP_ADMIN_EMAIL` (optional; promotes matching user to `ADMIN` during Flyway migration)
 
 ## Running Locally
 
@@ -94,8 +97,17 @@ docker compose up -d postgres
 - `POST /posts` (create root)
 - `POST /posts/{id}/reply`
 - `GET /posts/{id}`
+- `PATCH /posts/{id}` (author-only edit)
+- `DELETE /posts/{id}` (author delete, or `MOD`/`ADMIN` moderation delete)
 - `POST /posts/{id}/likes`
 - `DELETE /posts/{id}/likes`
+
+Delete constraint:
+- `DELETE /posts/{id}` returns `409 Conflict` when the target post has replies.
+
+### Admin
+
+- `PATCH /admin/users/{id}/role` (admin-only role management)
 
 ### Feed
 
@@ -119,7 +131,16 @@ docker compose up -d postgres
   - `/swagger-ui/**`
   - `/swagger-ui.html`
 - `Authorization` header format: `Bearer <accessToken>`
+- JWT payload includes role claim used by the API authorization context
 - Validation and domain errors are returned as RFC 7807 `application/problem+json`
+
+## RBAC and Ownership
+
+- `USER`: can edit/delete own posts, can create/like/reply
+- `MOD`: can remove posts from other users (still blocked by `409` when replies exist)
+- `ADMIN`: can manage user roles through `/admin/users/{id}/role`
+
+All role updates and write operations are auditable via `audit_log`.
 
 ## Testing
 
@@ -165,4 +186,3 @@ Residual risks for next hardening phase:
 - Missing rate limiting and brute-force protections
 - Missing audit logging and idempotency controls
 - Missing security automation in CI (SCA/CodeQL)
-

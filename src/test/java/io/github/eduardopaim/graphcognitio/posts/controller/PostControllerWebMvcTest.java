@@ -6,15 +6,18 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.eduardopaim.graphcognitio.entity.UserRole;
 import io.github.eduardopaim.graphcognitio.exception.ResourceNotFoundException;
 import io.github.eduardopaim.graphcognitio.posts.dto.CreatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.dto.PostResponse;
+import io.github.eduardopaim.graphcognitio.posts.dto.UpdatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.service.PostService;
 import io.github.eduardopaim.graphcognitio.security.AuthenticatedUser;
 import io.github.eduardopaim.graphcognitio.security.JwtAuthenticationFilter;
@@ -71,7 +74,7 @@ class PostControllerWebMvcTest {
         when(postService.createRootPost(eq(userId), any(CreatePostRequest.class))).thenReturn(response);
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId),
+                new AuthenticatedUser(userId, UserRole.USER),
                 null,
                 Collections.emptyList()
         );
@@ -157,7 +160,7 @@ class PostControllerWebMvcTest {
         when(postService.createReply(eq(userId), eq(parentId), any(CreatePostRequest.class))).thenReturn(response);
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId),
+                new AuthenticatedUser(userId, UserRole.USER),
                 null,
                 Collections.emptyList()
         );
@@ -195,7 +198,7 @@ class PostControllerWebMvcTest {
                 .thenThrow(new ResourceNotFoundException("Post not found"));
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId),
+                new AuthenticatedUser(userId, UserRole.USER),
                 null,
                 Collections.emptyList()
         );
@@ -221,7 +224,7 @@ class PostControllerWebMvcTest {
     void createReplyReturnsBadRequestWhenUuidIsInvalid() throws Exception {
         UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
         Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId),
+                new AuthenticatedUser(userId, UserRole.USER),
                 null,
                 Collections.emptyList()
         );
@@ -264,7 +267,7 @@ class PostControllerWebMvcTest {
         when(postService.likePost(userId, postId)).thenReturn(response);
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId),
+                new AuthenticatedUser(userId, UserRole.USER),
                 null,
                 Collections.emptyList()
         );
@@ -302,7 +305,7 @@ class PostControllerWebMvcTest {
         when(postService.unlikePost(userId, postId)).thenReturn(response);
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId),
+                new AuthenticatedUser(userId, UserRole.USER),
                 null,
                 Collections.emptyList()
         );
@@ -314,6 +317,66 @@ class PostControllerWebMvcTest {
                     .andExpect(jsonPath("$.id").value(postId.toString()))
                     .andExpect(jsonPath("$.likeCount").value(0))
                     .andExpect(jsonPath("$.likedByMe").value(false));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
+    void updatePostReturnsUpdatedBody() throws Exception {
+        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+        Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
+
+        PostResponse response = new PostResponse(
+                postId,
+                userId,
+                "Eduardo",
+                "updated content",
+                createdAt,
+                null,
+                postId,
+                0,
+                0,
+                false
+        );
+        when(postService.updatePost(eq(userId), eq(postId), any(UpdatePostRequest.class))).thenReturn(response);
+
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedUser(userId, UserRole.USER),
+                null,
+                Collections.emptyList()
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        try {
+            mockMvc.perform(patch("/posts/{id}", postId)
+                            .with(authentication(authentication))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new UpdatePostRequest("updated content"))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(postId.toString()))
+                    .andExpect(jsonPath("$.content").value("updated content"));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
+    void deletePostReturnsNoContent() throws Exception {
+        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedUser(userId, UserRole.USER),
+                null,
+                Collections.emptyList()
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        try {
+            mockMvc.perform(delete("/posts/{id}", postId).with(authentication(authentication)))
+                    .andExpect(status().isNoContent());
         } finally {
             SecurityContextHolder.clearContext();
         }

@@ -38,4 +38,6 @@ public interface PostRepository extends JpaRepository<PostEntity, UUID> {
     List<PostEntity> findRootPostsAfterCursor(@Param("cursorCreatedAt") Instant cursorCreatedAt,
                                               @Param("cursorId") UUID cursorId,
                                               Pageable pageable);
+
+    boolean existsByParentId(UUID parentId);
 }
