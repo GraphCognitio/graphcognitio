@@ -123,6 +123,12 @@ Delete constraint:
 - BFS by layers with batched child queries (`WHERE parent_id IN (...)`)
 - no N+1 traversal pattern
 
+### Observability
+
+- `GET /actuator/health`
+- `GET /actuator/metrics`
+- `GET /actuator/prometheus`
+
 ## Security
 
 - JWT required on all routes except:
@@ -158,6 +164,18 @@ When a limit is exceeded, API returns:
 - status `429 Too Many Requests`
 - RFC 7807 body (`application/problem+json`)
 - headers: `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+
+## Observability
+
+- Actuator endpoints enabled: `health`, `metrics`, `prometheus`
+- Structured JSON logging enabled for console output
+- Correlation header: `X-Request-Id` (accepted from client or generated)
+- MDC fields included in logs:
+  - `requestId`
+  - `userId` (when request is authenticated)
+- Custom HTTP metrics:
+  - `graphcognitio.http.server.latency` (timer by method/uri/status)
+  - `graphcognitio.http.server.errors` (counter by method/uri/statusClass)
 
 ## Testing
 

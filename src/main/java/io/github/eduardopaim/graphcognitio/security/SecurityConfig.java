@@ -1,5 +1,8 @@
 package io.github.eduardopaim.graphcognitio.security;
 
+import io.github.eduardopaim.graphcognitio.observability.AuthenticatedUserMdcFilter;
+import io.github.eduardopaim.graphcognitio.observability.HttpMetricsFilter;
+import io.github.eduardopaim.graphcognitio.observability.RequestCorrelationFilter;
 import io.github.eduardopaim.graphcognitio.ratelimit.RateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,7 +29,10 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
+                                                   RequestCorrelationFilter requestCorrelationFilter,
+                                                   AuthenticatedUserMdcFilter authenticatedUserMdcFilter,
                                                    RateLimitFilter rateLimitFilter,
+                                                   HttpMetricsFilter httpMetricsFilter,
                                                    AuthenticationEntryPoint authenticationEntryPoint,
                                                    AccessDeniedHandler accessDeniedHandler) throws Exception {
         return http
@@ -40,11 +46,15 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/auth/register", "/auth/login").permitAll()
+                        .requestMatchers("/actuator/health/**", "/actuator/metrics/**", "/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(requestCorrelationFilter, JwtAuthenticationFilter.class)
+                .addFilterAfter(httpMetricsFilter, RequestCorrelationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class)
+                .addFilterAfter(authenticatedUserMdcFilter, JwtAuthenticationFilter.class)
+                .addFilterAfter(rateLimitFilter, AuthenticatedUserMdcFilter.class)
                 .cors(Customizer.withDefaults())
                 .build();
     }
@@ -60,7 +70,7 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(List.of("http://localhost:5173"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
-        configuration.setExposedHeaders(List.of("Location"));
+        configuration.setExposedHeaders(List.of("Location", "X-Request-Id"));
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
