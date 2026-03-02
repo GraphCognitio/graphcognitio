@@ -1,5 +1,6 @@
 package io.github.eduardopaim.graphcognitio.graphs.controller;
 
+import io.github.eduardopaim.graphcognitio.graphs.GraphMode;
 import io.github.eduardopaim.graphcognitio.graphs.dto.ConversationGraphResponse;
 import io.github.eduardopaim.graphcognitio.graphs.service.GraphService;
 import jakarta.validation.constraints.Min;
@@ -26,7 +27,8 @@ public class GraphController {
     @GetMapping("/conversation/{rootId}")
     public ResponseEntity<ConversationGraphResponse> getConversationGraph(@PathVariable UUID rootId,
                                                                           @RequestParam(defaultValue = "2") @Min(0) int depth,
-                                                                          @RequestParam(defaultValue = "120") @Min(1) int limit) {
-        return ResponseEntity.ok(graphService.getConversationGraph(rootId, depth, limit));
+                                                                          @RequestParam(defaultValue = "120") @Min(1) int limit,
+                                                                          @RequestParam(defaultValue = "conversation") String mode) {
+        return ResponseEntity.ok(graphService.getConversationGraph(rootId, depth, limit, GraphMode.fromQueryParam(mode)));
     }
 }

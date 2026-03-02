@@ -3,6 +3,7 @@ package io.github.eduardopaim.graphcognitio.posts.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -23,15 +24,18 @@ import io.github.eduardopaim.graphcognitio.exception.ForbiddenException;
 import io.github.eduardopaim.graphcognitio.exception.ResourceNotFoundException;
 import io.github.eduardopaim.graphcognitio.posts.dto.CreatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.dto.FeedResponse;
+import io.github.eduardopaim.graphcognitio.posts.dto.FeedSort;
 import io.github.eduardopaim.graphcognitio.posts.dto.PostResponse;
 import io.github.eduardopaim.graphcognitio.posts.dto.UpdatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.mapper.PostMapper;
 import io.github.eduardopaim.graphcognitio.repository.EdgeRepository;
+import io.github.eduardopaim.graphcognitio.repository.PostFeedProjection;
 import io.github.eduardopaim.graphcognitio.repository.PostLikeRepository;
 import io.github.eduardopaim.graphcognitio.repository.PostRepository;
 import io.github.eduardopaim.graphcognitio.repository.UserRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -66,6 +70,12 @@ class PostServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private TopicDiscoveryService topicDiscoveryService;
+
+    @Mock
+    private PostEmbeddingService postEmbeddingService;
+
     @InjectMocks
     private PostService postService;
 
@@ -78,6 +88,7 @@ class PostServiceTest {
         UserEntity author = new UserEntity();
         author.setId(authorId);
         author.setName("Eduardo");
+        author.setRole(UserRole.USER);
 
         PostEntity parent = new PostEntity();
         parent.setId(parentId);
@@ -92,22 +103,26 @@ class PostServiceTest {
         when(postRepository.findById(parentId)).thenReturn(Optional.of(parent));
         when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(edgeRepository.save(any(EdgeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), anyBoolean()))
+        when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "conversation"));
+        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), any(String.class), eq(UserRole.USER),
+                anyBoolean(), anyList()))
                 .thenAnswer(invocation -> {
                     PostEntity post = invocation.getArgument(0);
-                    boolean likedByMe = invocation.getArgument(2);
+                    boolean likedByMe = invocation.getArgument(4);
                     return new PostResponse(
                             post.getId(),
                             post.getAuthorId(),
                             "Eduardo",
+                            "",
+                            UserRole.USER,
                             post.getContent(),
                             post.getCreatedAt(),
+                            null,
                             post.getParentId(),
                             post.getRootId(),
                             post.getReplyCount(),
                             post.getLikeCount(),
-                            likedByMe
-                    );
+                            likedByMe);
                 });
 
         PostResponse response = postService.createReply(authorId, parentId, new CreatePostRequest("reply body"));
@@ -146,6 +161,7 @@ class PostServiceTest {
         UserEntity author = new UserEntity();
         author.setId(authorId);
         author.setName("Eduardo");
+        author.setRole(UserRole.USER);
 
         PostEntity parent = new PostEntity();
         parent.setId(parentId);
@@ -157,22 +173,26 @@ class PostServiceTest {
         when(postRepository.findById(parentId)).thenReturn(Optional.of(parent));
         when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(edgeRepository.save(any(EdgeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), anyBoolean()))
+        when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "conversation"));
+        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), any(String.class), eq(UserRole.USER),
+                anyBoolean(), anyList()))
                 .thenAnswer(invocation -> {
                     PostEntity post = invocation.getArgument(0);
-                    boolean likedByMe = invocation.getArgument(2);
+                    boolean likedByMe = invocation.getArgument(4);
                     return new PostResponse(
                             post.getId(),
                             post.getAuthorId(),
                             "Eduardo",
+                            "",
+                            UserRole.USER,
                             post.getContent(),
                             post.getCreatedAt(),
+                            null,
                             post.getParentId(),
                             post.getRootId(),
                             post.getReplyCount(),
                             post.getLikeCount(),
-                            likedByMe
-                    );
+                            likedByMe);
                 });
 
         PostResponse response = postService.createReply(authorId, parentId, new CreatePostRequest("reply root"));
@@ -188,14 +208,14 @@ class PostServiceTest {
         UserEntity author = new UserEntity();
         author.setId(authorId);
         author.setName("Eduardo");
+        author.setRole(UserRole.USER);
 
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
         when(postRepository.findById(parentId)).thenReturn(Optional.empty());
 
         ResourceNotFoundException exception = assertThrows(
                 ResourceNotFoundException.class,
-                () -> postService.createReply(authorId, parentId, new CreatePostRequest("reply"))
-        );
+                () -> postService.createReply(authorId, parentId, new CreatePostRequest("reply")));
 
         assertEquals("Post not found", exception.getMessage());
         verify(postRepository, never()).save(any(PostEntity.class));
@@ -217,14 +237,18 @@ class PostServiceTest {
         when(postRepository.findRootPostsWithoutCursor(any(Pageable.class))).thenReturn(List.of(first, second, third));
         when(userRepository.findAllById(any())).thenReturn(List.of(
                 author(authorOneId, "Author One"),
-                author(authorTwoId, "Author Two")
-        ));
-        when(postMapper.toResponse(eq(first), eq("Author One"), eq(false))).thenReturn(toResponse(first, "Author One", false));
-        when(postMapper.toResponse(eq(second), eq("Author Two"), eq(true))).thenReturn(toResponse(second, "Author Two", true));
+                author(authorTwoId, "Author Two")));
+        when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "context"));
+        when(postMapper.toResponse(eq(first), eq("Author One"), any(String.class), eq(UserRole.USER), eq(false),
+                anyList()))
+                .thenReturn(toResponse(first, "Author One", UserRole.USER, false));
+        when(postMapper.toResponse(eq(second), eq("Author Two"), any(String.class), eq(UserRole.USER), eq(true),
+                anyList()))
+                .thenReturn(toResponse(second, "Author Two", UserRole.USER, true));
         when(postLikeRepository.findLikedPostIdsByUserIdAndPostIdIn(eq(authorOneId), any()))
                 .thenReturn(Set.of(secondPostId));
 
-        FeedResponse response = postService.getFeed(null, 2, authorOneId);
+        FeedResponse response = postService.getFeed(null, 2, authorOneId, FeedSort.RECENT);
 
         assertEquals(2, response.items().size());
         assertEquals(firstPostId, response.items().get(0).id());
@@ -245,9 +269,12 @@ class PostServiceTest {
         when(postRepository.findRootPostsAfterCursor(eq(cursorCreatedAt), eq(cursorId), any(Pageable.class)))
                 .thenReturn(List.of(post));
         when(userRepository.findAllById(any())).thenReturn(List.of(author(authorId, "Author One")));
-        when(postMapper.toResponse(eq(post), eq("Author One"), eq(false))).thenReturn(toResponse(post, "Author One", false));
+        when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "context"));
+        when(postMapper.toResponse(eq(post), eq("Author One"), any(String.class), eq(UserRole.USER), eq(false),
+                anyList()))
+                .thenReturn(toResponse(post, "Author One", UserRole.USER, false));
 
-        FeedResponse response = postService.getFeed(cursor, 2, null);
+        FeedResponse response = postService.getFeed(cursor, 2, null, FeedSort.RECENT);
 
         assertEquals(1, response.items().size());
         assertEquals(postId, response.items().get(0).id());
@@ -258,9 +285,43 @@ class PostServiceTest {
     void getFeedThrowsBadRequestWhenCursorIsInvalid() {
         BadRequestException exception = assertThrows(
                 BadRequestException.class,
-                () -> postService.getFeed("invalid-cursor", 20, null)
-        );
+                () -> postService.getFeed("invalid-cursor", 20, null, FeedSort.RECENT));
         assertEquals("Invalid cursor", exception.getMessage());
+    }
+
+    @Test
+    void getFeedReturnsRelevantItemsAndNextCursorWhenHasMore() {
+        UUID authorOneId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+        UUID authorTwoId = UUID.fromString("338ed4fe-f51d-423d-8fd3-c35c4f740fc7");
+        UUID firstPostId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+        UUID secondPostId = UUID.fromString("bbdd2f10-c028-4058-b7f6-f0e74f0ed78d");
+        UUID thirdPostId = UUID.fromString("dc4a2480-0619-4512-8733-fb30bcf8dca8");
+
+        PostFeedProjection first = feedProjection(
+                firstPostId, authorOneId, "root-1", Instant.parse("2026-02-26T21:10:00Z"), 4, 8,
+                new BigDecimal("0.52"));
+        PostFeedProjection second = feedProjection(
+                secondPostId, authorTwoId, "root-2", Instant.parse("2026-02-26T21:09:00Z"), 2, 6,
+                new BigDecimal("0.36"));
+        PostFeedProjection third = feedProjection(
+                thirdPostId, authorOneId, "root-3", Instant.parse("2026-02-26T21:08:00Z"), 0, 0,
+                new BigDecimal("0.00"));
+
+        when(postRepository.findRelevantRootPosts(eq(null), eq(null), eq(null), eq(3)))
+                .thenReturn(List.of(first, second, third));
+        when(userRepository.findAllById(any())).thenReturn(List.of(
+                author(authorOneId, "Author One"),
+                author(authorTwoId, "Author Two")));
+        when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "ranking"));
+        when(postLikeRepository.findLikedPostIdsByUserIdAndPostIdIn(eq(authorOneId), any()))
+                .thenReturn(Set.of(secondPostId));
+
+        FeedResponse response = postService.getFeed(null, 2, authorOneId, FeedSort.RELEVANT);
+
+        assertEquals(2, response.items().size());
+        assertEquals(firstPostId, response.items().get(0).id());
+        assertEquals(secondPostId, response.items().get(1).id());
+        assertEquals(encodeRelevantCursor("0.36", "2026-02-26T21:09:00Z", secondPostId), response.nextCursor());
     }
 
     @Test
@@ -279,8 +340,9 @@ class PostServiceTest {
         when(postLikeRepository.save(any(PostLikeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author(authorId, "Author")));
-        when(postMapper.toResponse(eq(post), eq("Author"), eq(true)))
-                .thenAnswer(invocation -> toResponse(post, "Author", true));
+        when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "signal"));
+        when(postMapper.toResponse(eq(post), eq("Author"), any(String.class), eq(UserRole.USER), eq(true), anyList()))
+                .thenAnswer(invocation -> toResponse(post, "Author", UserRole.USER, true));
 
         PostResponse response = postService.likePost(userId, postId);
 
@@ -308,8 +370,9 @@ class PostServiceTest {
         when(postLikeRepository.findByPostIdAndUserId(postId, userId)).thenReturn(Optional.of(like));
         when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author(authorId, "Author")));
-        when(postMapper.toResponse(eq(post), eq("Author"), eq(false)))
-                .thenAnswer(invocation -> toResponse(post, "Author", false));
+        when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "signal"));
+        when(postMapper.toResponse(eq(post), eq("Author"), any(String.class), eq(UserRole.USER), eq(false), anyList()))
+                .thenAnswer(invocation -> toResponse(post, "Author", UserRole.USER, false));
 
         PostResponse response = postService.unlikePost(userId, postId);
 
@@ -333,8 +396,7 @@ class PostServiceTest {
 
         ForbiddenException exception = assertThrows(
                 ForbiddenException.class,
-                () -> postService.updatePost(actorId, postId, new UpdatePostRequest("updated"))
-        );
+                () -> postService.updatePost(actorId, postId, new UpdatePostRequest("updated")));
 
         assertEquals("You can only edit your own posts", exception.getMessage());
         verify(postRepository, never()).save(any(PostEntity.class));
@@ -383,8 +445,7 @@ class PostServiceTest {
 
         ConflictException exception = assertThrows(
                 ConflictException.class,
-                () -> postService.deletePost(authorId, postId)
-        );
+                () -> postService.deletePost(authorId, postId));
 
         assertEquals("Cannot delete post with replies", exception.getMessage());
         verify(postRepository, never()).delete(any(PostEntity.class));
@@ -414,23 +475,95 @@ class PostServiceTest {
         return user;
     }
 
-    private PostResponse toResponse(PostEntity post, String authorName, boolean likedByMe) {
+    private PostResponse toResponse(PostEntity post, String authorName, UserRole authorRole, boolean likedByMe) {
         return new PostResponse(
                 post.getId(),
                 post.getAuthorId(),
                 authorName,
+                "",
+                authorRole,
                 post.getContent(),
                 post.getCreatedAt(),
+                null,
                 post.getParentId(),
                 post.getRootId(),
                 post.getReplyCount(),
                 post.getLikeCount(),
-                likedByMe
-        );
+                likedByMe);
     }
 
     private String encodeCursor(String createdAt, UUID id) {
         String raw = createdAt + "|" + id;
         return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String encodeRelevantCursor(String score, String createdAt, UUID id) {
+        String raw = score + "|" + createdAt + "|" + id;
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private PostFeedProjection feedProjection(UUID id,
+            UUID authorId,
+            String content,
+            Instant createdAt,
+            int replyCount,
+            int likeCount,
+            BigDecimal feedScore) {
+        return new PostFeedProjection() {
+            @Override
+            public UUID getId() {
+                return id;
+            }
+
+            @Override
+            public UUID getAuthorId() {
+                return authorId;
+            }
+
+            @Override
+            public String getContent() {
+                return content;
+            }
+
+            @Override
+            public Instant getCreatedAt() {
+                return createdAt;
+            }
+
+            @Override
+            public Instant getUpdatedAt() {
+                return null;
+            }
+
+            @Override
+            public UUID getParentId() {
+                return null;
+            }
+
+            @Override
+            public UUID getRootId() {
+                return id;
+            }
+
+            @Override
+            public int getReplyCount() {
+                return replyCount;
+            }
+
+            @Override
+            public int getLikeCount() {
+                return likeCount;
+            }
+
+            @Override
+            public BigDecimal getFeedScore() {
+                return feedScore;
+            }
+
+            @Override
+            public BigDecimal getSemanticDensity() {
+                return BigDecimal.valueOf(0.72);
+            }
+        };
     }
 }

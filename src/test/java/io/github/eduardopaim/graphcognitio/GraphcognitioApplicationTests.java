@@ -31,78 +31,72 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(
-        controllers = AuthController.class,
-        excludeFilters = @ComponentScan.Filter(
-                type = FilterType.ASSIGNABLE_TYPE,
-                classes = {
-                        JwtAuthenticationFilter.class,
-                        RequestCorrelationFilter.class,
-                        AuthenticatedUserMdcFilter.class,
-                        HttpMetricsFilter.class,
-                        RateLimitFilter.class
-                }
-        )
-)
+@WebMvcTest(controllers = AuthController.class, excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = {
+                JwtAuthenticationFilter.class,
+                RequestCorrelationFilter.class,
+                AuthenticatedUserMdcFilter.class,
+                HttpMetricsFilter.class,
+                RateLimitFilter.class
+}))
 @AutoConfigureMockMvc(addFilters = false)
 class GraphcognitioApplicationTests {
 
-    @Autowired
-    private MockMvc mockMvc;
+        @Autowired
+        private MockMvc mockMvc;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+        @Autowired
+        private ObjectMapper objectMapper;
 
-    @MockBean
-    private AuthService authService;
+        @MockBean
+        private AuthService authService;
 
-    @Test
-    void registerReturnsCreatedWithTokenAndUser() throws Exception {
-        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
-        Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
-        AuthResponse response = new AuthResponse(
-                "access-token",
-                new AuthUserResponse(userId, "Eduardo", "eduardo@example.com", UserRole.USER, createdAt)
-        );
+        @Test
+        void registerReturnsCreatedWithTokenAndUser() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
+                AuthResponse response = new AuthResponse(
+                                "access-token",
+                                new AuthUserResponse(userId, "Eduardo", "eduardo", "eduardo@example.com", UserRole.USER,
+                                                "Bio here", "http://avatar.com", createdAt));
 
-        when(authService.register(any(RegisterRequest.class))).thenReturn(response);
+                when(authService.register(any(RegisterRequest.class))).thenReturn(response);
 
-        RegisterRequest request = new RegisterRequest("Eduardo", "eduardo@example.com", "secret123");
+                RegisterRequest request = new RegisterRequest("Eduardo", "eduardo@example.com", "secret123");
 
-        mockMvc.perform(post("/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.accessToken").value("access-token"))
-                .andExpect(jsonPath("$.user.id").value(userId.toString()))
-                .andExpect(jsonPath("$.user.name").value("Eduardo"))
-                .andExpect(jsonPath("$.user.email").value("eduardo@example.com"))
-                .andExpect(jsonPath("$.user.role").value("USER"))
-                .andExpect(jsonPath("$.user.createdAt").value("2026-02-26T21:10:00Z"));
-    }
+                mockMvc.perform(post("/auth/register")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isCreated())
+                                .andExpect(jsonPath("$.accessToken").value("access-token"))
+                                .andExpect(jsonPath("$.user.id").value(userId.toString()))
+                                .andExpect(jsonPath("$.user.name").value("Eduardo"))
+                                .andExpect(jsonPath("$.user.email").value("eduardo@example.com"))
+                                .andExpect(jsonPath("$.user.role").value("USER"))
+                                .andExpect(jsonPath("$.user.createdAt").value("2026-02-26T21:10:00Z"));
+        }
 
-    @Test
-    void loginReturnsOkWithTokenAndUser() throws Exception {
-        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
-        Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
-        AuthResponse response = new AuthResponse(
-                "access-token",
-                new AuthUserResponse(userId, "Eduardo", "eduardo@example.com", UserRole.USER, createdAt)
-        );
+        @Test
+        void loginReturnsOkWithTokenAndUser() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
+                AuthResponse response = new AuthResponse(
+                                "access-token",
+                                new AuthUserResponse(userId, "Eduardo", "eduardo", "eduardo@example.com", UserRole.USER,
+                                                "Bio here", "http://avatar.com", createdAt));
 
-        when(authService.login(any(LoginRequest.class))).thenReturn(response);
+                when(authService.login(any(LoginRequest.class))).thenReturn(response);
 
-        LoginRequest request = new LoginRequest("eduardo@example.com", "secret123");
+                LoginRequest request = new LoginRequest("eduardo@example.com", "secret123");
 
-        mockMvc.perform(post("/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").value("access-token"))
-                .andExpect(jsonPath("$.user.id").value(userId.toString()))
-                .andExpect(jsonPath("$.user.name").value("Eduardo"))
-                .andExpect(jsonPath("$.user.email").value("eduardo@example.com"))
-                .andExpect(jsonPath("$.user.role").value("USER"))
-                .andExpect(jsonPath("$.user.createdAt").value("2026-02-26T21:10:00Z"));
-    }
+                mockMvc.perform(post("/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.accessToken").value("access-token"))
+                                .andExpect(jsonPath("$.user.id").value(userId.toString()))
+                                .andExpect(jsonPath("$.user.name").value("Eduardo"))
+                                .andExpect(jsonPath("$.user.email").value("eduardo@example.com"))
+                                .andExpect(jsonPath("$.user.role").value("USER"))
+                                .andExpect(jsonPath("$.user.createdAt").value("2026-02-26T21:10:00Z"));
+        }
 }

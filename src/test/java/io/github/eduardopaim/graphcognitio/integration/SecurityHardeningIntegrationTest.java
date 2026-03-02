@@ -17,7 +17,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 @Testcontainers
 @SpringBootTest(properties = "app.security.cors.allowed-origins[0]=http://localhost:5173")
@@ -32,7 +31,7 @@ class SecurityHardeningIntegrationTest {
     }
 
     @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(DockerImageName.parse("postgres:18"))
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(PgvectorTestSupport.PGVECTOR_POSTGRES)
             .withDatabaseName("graphcognitio")
             .withUsername("graphcognitio")
             .withPassword("graphcognitio_dev_password");

@@ -76,6 +76,10 @@ Important:
 - `APP_CACHE_TTL_SECONDS` (optional, default `30`)
 - `ENABLE_SEARCH` (optional, default `true`)
 - `ENABLE_GRAPH_EXPAND` (optional, default `true`)
+- `APP_EMBEDDINGS_PROVIDER` (optional; `hashing` in `dev`/`test`, `openai` in `prod` by default)
+- `APP_EMBEDDINGS_MODEL` (optional; defaults to `semantic-hash-v3` locally and `text-embedding-3-small` in `prod`)
+- `APP_EMBEDDINGS_DIMENSIONS` (optional, default `192`; keep it aligned with the pgvector column dimension)
+- `APP_EMBEDDINGS_REMOTE_BASE_URL` / `APP_EMBEDDINGS_REMOTE_PATH` / `APP_EMBEDDINGS_REMOTE_API_KEY` (required for remote embeddings)
 - `APP_CORS_ALLOWED_ORIGINS` (required in prod; comma-separated origins for browser access)
 - `APP_PUBLIC_OBSERVABILITY_ENABLED` (optional; defaults to `true` in `dev`/`test`, `false` in `prod`)
 
@@ -105,8 +109,8 @@ Profiles:
 - no default runtime profile is forced
 - set `SPRING_PROFILES_ACTIVE=dev` for local development
 - `application-dev.yml`: local-friendly docs enabled
-- `application-test.yml`: docs disabled for test runs, local CORS allowed by default
-- `application-prod.yml`: docs disabled by default unless explicitly enabled, no default CORS origin
+- `application-test.yml`: docs disabled for test runs, local CORS allowed by default, hashing embeddings by default
+- `application-prod.yml`: docs disabled by default unless explicitly enabled, no default CORS origin, remote embeddings by default
 
 ## API Surface
 

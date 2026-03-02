@@ -29,7 +29,6 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 @Testcontainers
 @SpringBootTest
@@ -44,7 +43,7 @@ class SearchIntegrationTest {
     }
 
     @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(DockerImageName.parse("postgres:18"))
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(PgvectorTestSupport.PGVECTOR_POSTGRES)
             .withDatabaseName("graphcognitio")
             .withUsername("graphcognitio")
             .withPassword("graphcognitio_dev_password");
@@ -107,6 +106,30 @@ class SearchIntegrationTest {
         assertEquals(newerPostId, searchResponse.get("items").get(1).get("id").asText());
     }
 
+    @Test
+    void relevantFeedSupportsCursorPaginationAgainstPgvectorBackedRanking() throws Exception {
+        AuthContext auth = registerAndLogin("feed-relevant");
+
+        String graphA = createRootPost(auth.accessToken(), "semantic graph ranking and contextual clustering");
+        String graphB = createRootPost(auth.accessToken(), "graph context mapping for semantic conversations");
+        String unrelated = createRootPost(auth.accessToken(), "kitchen recipes for citrus dessert plating");
+
+        JsonNode firstPage = relevantFeed(auth.accessToken(), null, 2);
+        assertEquals(2, firstPage.get("items").size());
+        assertNotNull(firstPage.get("nextCursor"));
+        assertTrue(!firstPage.get("nextCursor").isNull());
+
+        JsonNode secondPage = relevantFeed(auth.accessToken(), firstPage.get("nextCursor").asText(), 2);
+        assertEquals(1, secondPage.get("items").size());
+        assertTrue(secondPage.get("nextCursor").isNull());
+
+        Set<String> ids = new HashSet<>();
+        firstPage.get("items").forEach(item -> ids.add(item.get("id").asText()));
+        secondPage.get("items").forEach(item -> ids.add(item.get("id").asText()));
+
+        assertEquals(Set.of(graphA, graphB, unrelated), ids);
+    }
+
     private AuthContext registerAndLogin(String prefix) throws Exception {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         String email = prefix + "." + suffix + "@example.com";
@@ -163,6 +186,23 @@ class SearchIntegrationTest {
         var requestBuilder = get("/search")
                 .header(AUTHORIZATION, bearer(accessToken))
                 .param("q", query)
+                .param("limit", Integer.toString(limit));
+
+        if (cursor != null) {
+            requestBuilder = requestBuilder.param("cursor", cursor);
+        }
+
+        MvcResult result = mockMvc.perform(requestBuilder)
+                .andExpect(status().isOk())
+                .andReturn();
+
+        return readJson(result);
+    }
+
+    private JsonNode relevantFeed(String accessToken, String cursor, int limit) throws Exception {
+        var requestBuilder = get("/feed")
+                .header(AUTHORIZATION, bearer(accessToken))
+                .param("sort", "relevant")
                 .param("limit", Integer.toString(limit));
 
         if (cursor != null) {

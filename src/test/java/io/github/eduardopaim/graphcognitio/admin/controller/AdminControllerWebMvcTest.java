@@ -3,6 +3,7 @@ package io.github.eduardopaim.graphcognitio.admin.controller;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -19,6 +20,7 @@ import io.github.eduardopaim.graphcognitio.ratelimit.RateLimitFilter;
 import io.github.eduardopaim.graphcognitio.security.AuthenticatedUser;
 import io.github.eduardopaim.graphcognitio.security.JwtAuthenticationFilter;
 import java.time.Instant;
+import java.util.List;
 import java.util.Collections;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -58,6 +60,41 @@ class AdminControllerWebMvcTest {
 
     @MockBean
     private AdminService adminService;
+
+    @Test
+    void searchUsersReturnsAdminUserList() throws Exception {
+        UUID actorId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+        UUID targetId = UUID.fromString("338ed4fe-f51d-423d-8fd3-c35c4f740fc7");
+
+        when(adminService.searchUsers(eq(actorId), eq("target"), eq(5))).thenReturn(List.of(
+                new AdminUserResponse(
+                        targetId,
+                        "Target User",
+                        "target@example.com",
+                        UserRole.USER,
+                        Instant.parse("2026-02-26T21:10:00Z")
+                )
+        ));
+
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedUser(actorId, UserRole.ADMIN),
+                null,
+                Collections.emptyList()
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        try {
+            mockMvc.perform(get("/admin/users")
+                            .with(authentication(authentication))
+                            .queryParam("query", "target")
+                            .queryParam("limit", "5"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].id").value(targetId.toString()))
+                    .andExpect(jsonPath("$[0].email").value("target@example.com"));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
 
     @Test
     void updateUserRoleReturnsUpdatedUser() throws Exception {

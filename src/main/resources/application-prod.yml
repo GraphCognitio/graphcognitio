@@ -1,4 +1,8 @@
 app:
+  embeddings:
+    provider: ${APP_EMBEDDINGS_PROVIDER:openai}
+    model: ${APP_EMBEDDINGS_MODEL:text-embedding-3-small}
+    dimensions: ${APP_EMBEDDINGS_DIMENSIONS:192}
   security:
     cors:
       allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}

@@ -1,6 +1,9 @@
 package io.github.eduardopaim.graphcognitio.posts.controller;
 
+import io.github.eduardopaim.graphcognitio.posts.dto.ContextFeedResponse;
 import io.github.eduardopaim.graphcognitio.posts.dto.FeedResponse;
+import io.github.eduardopaim.graphcognitio.posts.dto.FeedSort;
+import io.github.eduardopaim.graphcognitio.posts.service.FeedContextService;
 import io.github.eduardopaim.graphcognitio.posts.service.PostService;
 import io.github.eduardopaim.graphcognitio.security.AuthenticatedUser;
 import jakarta.validation.constraints.Max;
@@ -18,16 +21,26 @@ import org.springframework.web.bind.annotation.RestController;
 public class FeedController {
 
     private final PostService postService;
+    private final FeedContextService feedContextService;
 
-    public FeedController(PostService postService) {
+    public FeedController(PostService postService, FeedContextService feedContextService) {
         this.postService = postService;
+        this.feedContextService = feedContextService;
     }
 
     @GetMapping("/feed")
     public ResponseEntity<FeedResponse> getFeed(@AuthenticationPrincipal AuthenticatedUser authenticatedUser,
                                                 @RequestParam(required = false) String cursor,
+                                                @RequestParam(defaultValue = "recent") String sort,
                                                 @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit) {
         UUID viewerId = authenticatedUser == null ? null : authenticatedUser.userId();
-        return ResponseEntity.ok(postService.getFeed(cursor, limit, viewerId));
+        return ResponseEntity.ok(postService.getFeed(cursor, limit, viewerId, FeedSort.fromQueryParam(sort)));
+    }
+
+    @GetMapping("/feed/context")
+    public ResponseEntity<ContextFeedResponse> getContextFeed(@RequestParam(defaultValue = "3") @Min(1) @Max(8) int limit,
+                                                              @RequestParam(required = false) Double minScore,
+                                                              @RequestParam(required = false) String focus) {
+        return ResponseEntity.ok(feedContextService.getContextFeed(null, limit, minScore, focus));
     }
 }

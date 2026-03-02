@@ -6,7 +6,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.github.eduardopaim.graphcognitio.entity.UserRole;
 import io.github.eduardopaim.graphcognitio.exception.ResourceNotFoundException;
+import io.github.eduardopaim.graphcognitio.graphs.GraphMode;
 import io.github.eduardopaim.graphcognitio.graphs.dto.ConversationEdgeResponse;
 import io.github.eduardopaim.graphcognitio.graphs.dto.ConversationGraphResponse;
 import io.github.eduardopaim.graphcognitio.graphs.dto.ConversationNodeResponse;
@@ -62,10 +64,10 @@ class GraphControllerWebMvcTest {
         ConversationGraphResponse response = new ConversationGraphResponse(
                 List.of(
                         new ConversationNodeResponse(
-                                rootId, authorId, "Eduardo", "root post", rootCreatedAt, null, rootId, 1
+                                rootId, authorId, "Eduardo", UserRole.USER, "root post", rootCreatedAt, null, rootId, 1, null, null, null
                         ),
                         new ConversationNodeResponse(
-                                replyId, authorId, "Eduardo", "reply post", replyCreatedAt, rootId, rootId, 0
+                                replyId, authorId, "Eduardo", UserRole.USER, "reply post", replyCreatedAt, rootId, rootId, 0, null, null, null
                         )
                 ),
                 List.of(
@@ -74,7 +76,7 @@ class GraphControllerWebMvcTest {
                         )
                 )
         );
-        when(graphService.getConversationGraph(rootId, 2, 120)).thenReturn(response);
+        when(graphService.getConversationGraph(rootId, 2, 120, GraphMode.CONVERSATION)).thenReturn(response);
 
         mockMvc.perform(get("/graphs/conversation/{rootId}", rootId))
                 .andExpect(status().isOk())
@@ -82,6 +84,7 @@ class GraphControllerWebMvcTest {
                 .andExpect(jsonPath("$.nodes[0].id").value(rootId.toString()))
                 .andExpect(jsonPath("$.nodes[0].authorId").value(authorId.toString()))
                 .andExpect(jsonPath("$.nodes[0].authorName").value("Eduardo"))
+                .andExpect(jsonPath("$.nodes[0].authorRole").value("USER"))
                 .andExpect(jsonPath("$.nodes[0].contentPreview").value("root post"))
                 .andExpect(jsonPath("$.nodes[0].createdAt").value("2026-02-26T21:10:00Z"))
                 .andExpect(jsonPath("$.nodes[0].parentId").doesNotExist())
@@ -98,7 +101,7 @@ class GraphControllerWebMvcTest {
     @Test
     void getConversationReturnsNotFoundWhenRootDoesNotExist() throws Exception {
         UUID rootId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
-        when(graphService.getConversationGraph(rootId, 2, 120))
+        when(graphService.getConversationGraph(rootId, 2, 120, GraphMode.CONVERSATION))
                 .thenThrow(new ResourceNotFoundException("Root post not found"));
 
         mockMvc.perform(get("/graphs/conversation/{rootId}", rootId))
@@ -130,5 +133,41 @@ class GraphControllerWebMvcTest {
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.detail").value("Validation failed"))
                 .andExpect(jsonPath("$.errors.depth").exists());
+    }
+
+    @Test
+    void getConversationSupportsTopicMode() throws Exception {
+        UUID rootId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+        UUID relatedId = UUID.fromString("bbdd2f10-c028-4058-b7f6-f0e74f0ed78d");
+        UUID authorId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+        UUID edgeId = UUID.fromString("dc4a2480-0619-4512-8733-fb30bcf8dca8");
+        Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
+
+        ConversationGraphResponse response = new ConversationGraphResponse(
+                List.of(
+                        new ConversationNodeResponse(rootId, authorId, "Eduardo", UserRole.USER, "root post", createdAt, null, rootId, 1, null, null, null),
+                        new ConversationNodeResponse(relatedId, authorId, "Eduardo", UserRole.USER, "topic match", createdAt, null, relatedId, 0, 0.712, List.of("topic", "match"), "Embedding match around: topic, match")
+                ),
+                List.of(new ConversationEdgeResponse(edgeId, rootId, relatedId, "RELATED", createdAt))
+        );
+        when(graphService.getConversationGraph(rootId, 2, 120, GraphMode.TOPIC)).thenReturn(response);
+
+        mockMvc.perform(get("/graphs/conversation/{rootId}", rootId).param("mode", "topic"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nodes.length()").value(2))
+                .andExpect(jsonPath("$.nodes[1].topicReason").value("Embedding match around: topic, match"))
+                .andExpect(jsonPath("$.edges[0].type").value("RELATED"));
+    }
+
+    @Test
+    void getConversationReturnsBadRequestWhenModeIsInvalid() throws Exception {
+        UUID rootId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+
+        mockMvc.perform(get("/graphs/conversation/{rootId}", rootId).param("mode", "orbit"))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("Content-Type", "application/problem+json"))
+                .andExpect(jsonPath("$.title").value("Bad Request"))
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.detail").value("Invalid graph mode"));
     }
 }

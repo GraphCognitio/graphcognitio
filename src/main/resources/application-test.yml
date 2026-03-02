@@ -1,4 +1,8 @@
 app:
+  embeddings:
+    provider: ${APP_EMBEDDINGS_PROVIDER:hashing}
+    model: ${APP_EMBEDDINGS_MODEL:semantic-hash-v3}
+    dimensions: ${APP_EMBEDDINGS_DIMENSIONS:192}
   security:
     cors:
       allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}

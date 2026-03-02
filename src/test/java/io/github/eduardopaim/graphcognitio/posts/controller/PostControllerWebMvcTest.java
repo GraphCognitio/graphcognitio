@@ -21,13 +21,19 @@ import io.github.eduardopaim.graphcognitio.observability.HttpMetricsFilter;
 import io.github.eduardopaim.graphcognitio.observability.RequestCorrelationFilter;
 import io.github.eduardopaim.graphcognitio.posts.dto.CreatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.dto.PostResponse;
+import io.github.eduardopaim.graphcognitio.posts.dto.RelatedPostResponse;
+import io.github.eduardopaim.graphcognitio.posts.dto.PostThreadResponse;
+import io.github.eduardopaim.graphcognitio.posts.dto.ThreadNodeResponse;
 import io.github.eduardopaim.graphcognitio.posts.dto.UpdatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.service.PostService;
+import io.github.eduardopaim.graphcognitio.posts.service.PostThreadService;
+import io.github.eduardopaim.graphcognitio.posts.service.RelatedPostsService;
 import io.github.eduardopaim.graphcognitio.ratelimit.RateLimitFilter;
 import io.github.eduardopaim.graphcognitio.security.AuthenticatedUser;
 import io.github.eduardopaim.graphcognitio.security.JwtAuthenticationFilter;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,392 +48,470 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(
-        controllers = PostController.class,
-        excludeFilters = @ComponentScan.Filter(
-                type = FilterType.ASSIGNABLE_TYPE,
-                classes = {
-                        JwtAuthenticationFilter.class,
-                        RequestCorrelationFilter.class,
-                        AuthenticatedUserMdcFilter.class,
-                        HttpMetricsFilter.class,
-                        RateLimitFilter.class
-                }
-        )
-)
+@WebMvcTest(controllers = PostController.class, excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = {
+                JwtAuthenticationFilter.class,
+                RequestCorrelationFilter.class,
+                AuthenticatedUserMdcFilter.class,
+                HttpMetricsFilter.class,
+                RateLimitFilter.class
+}))
 @AutoConfigureMockMvc(addFilters = false)
 class PostControllerWebMvcTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+        @Autowired
+        private MockMvc mockMvc;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+        @Autowired
+        private ObjectMapper objectMapper;
 
-    @MockBean
-    private PostService postService;
+        @MockBean
+        private PostService postService;
 
-    @MockBean
-    private IdempotencyService idempotencyService;
+        @MockBean
+        private PostThreadService postThreadService;
 
-    @Test
-    void createPostReturnsCreatedBodyAndLocation() throws Exception {
-        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
-        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
-        Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
+        @MockBean
+        private RelatedPostsService relatedPostsService;
 
-        PostResponse response = new PostResponse(
-                postId,
-                userId,
-                "Eduardo",
-                "hello graph world",
-                createdAt,
-                null,
-                postId,
-                0,
-                0,
-                false
-        );
-        when(idempotencyService.execute(eq(userId), any(), eq("/posts"), any(), eq(201), eq(PostResponse.class), any()))
-                .thenReturn(response);
+        @MockBean
+        private IdempotencyService idempotencyService;
 
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId, UserRole.USER),
-                null,
-                Collections.emptyList()
-        );
-        SecurityContextHolder.getContext().setAuthentication(authentication);
+        @Test
+        void createPostReturnsCreatedBodyAndLocation() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+                Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
 
-        CreatePostRequest request = new CreatePostRequest("hello graph world");
-        try {
-            mockMvc.perform(post("/posts")
-                            .with(authentication(authentication))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isCreated())
-                    .andExpect(header().string("Location", "http://localhost/posts/" + postId))
-                    .andExpect(jsonPath("$.id").value(postId.toString()))
-                    .andExpect(jsonPath("$.authorId").value(userId.toString()))
-                    .andExpect(jsonPath("$.authorName").value("Eduardo"))
-                    .andExpect(jsonPath("$.content").value("hello graph world"))
-                    .andExpect(jsonPath("$.createdAt").value("2026-02-26T21:10:00Z"))
-                    .andExpect(jsonPath("$.parentId").doesNotExist())
-                    .andExpect(jsonPath("$.rootId").value(postId.toString()))
-                    .andExpect(jsonPath("$.replyCount").value(0))
-                    .andExpect(jsonPath("$.likeCount").value(0))
-                    .andExpect(jsonPath("$.likedByMe").value(false));
-        } finally {
-            SecurityContextHolder.clearContext();
+                PostResponse response = new PostResponse(
+                                postId,
+                                userId,
+                                "Eduardo",
+                                "",
+                                UserRole.USER,
+                                "hello graph world",
+                                createdAt,
+                                null,
+                                null,
+                                postId,
+                                0,
+                                0,
+                                false);
+                when(idempotencyService.execute(eq(userId), any(), eq("/posts"), any(), eq(201), eq(PostResponse.class),
+                                any()))
+                                .thenReturn(response);
+
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                                new AuthenticatedUser(userId, UserRole.USER),
+                                null,
+                                Collections.emptyList());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                CreatePostRequest request = new CreatePostRequest("hello graph world");
+                try {
+                        mockMvc.perform(post("/posts")
+                                        .with(authentication(authentication))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(objectMapper.writeValueAsString(request)))
+                                        .andExpect(status().isCreated())
+                                        .andExpect(header().string("Location", "http://localhost/posts/" + postId))
+                                        .andExpect(jsonPath("$.id").value(postId.toString()))
+                                        .andExpect(jsonPath("$.authorId").value(userId.toString()))
+                                        .andExpect(jsonPath("$.authorName").value("Eduardo"))
+                                        .andExpect(jsonPath("$.authorRole").value("USER"))
+                                        .andExpect(jsonPath("$.content").value("hello graph world"))
+                                        .andExpect(jsonPath("$.createdAt").value("2026-02-26T21:10:00Z"))
+                                        .andExpect(jsonPath("$.parentId").doesNotExist())
+                                        .andExpect(jsonPath("$.rootId").value(postId.toString()))
+                                        .andExpect(jsonPath("$.replyCount").value(0))
+                                        .andExpect(jsonPath("$.likeCount").value(0))
+                                        .andExpect(jsonPath("$.likedByMe").value(false));
+                } finally {
+                        SecurityContextHolder.clearContext();
+                }
         }
-    }
 
-    @Test
-    void getPostReturnsOkBody() throws Exception {
-        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
-        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
-        Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
+        @Test
+        void getPostReturnsOkBody() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+                Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
 
-        PostResponse response = new PostResponse(
-                postId,
-                userId,
-                "Eduardo",
-                "hello graph world",
-                createdAt,
-                null,
-                postId,
-                0,
-                2,
-                true
-        );
-        when(postService.getPostById(postId, null)).thenReturn(response);
+                PostResponse response = new PostResponse(
+                                postId,
+                                userId,
+                                "Eduardo",
+                                "",
+                                UserRole.MOD,
+                                "hello graph world",
+                                createdAt,
+                                null,
+                                null,
+                                postId,
+                                0,
+                                2,
+                                true);
+                when(postService.getPostById(postId, null)).thenReturn(response);
 
-        mockMvc.perform(get("/posts/{id}", postId))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(postId.toString()))
-                .andExpect(jsonPath("$.authorId").value(userId.toString()))
-                .andExpect(jsonPath("$.authorName").value("Eduardo"))
-                .andExpect(jsonPath("$.content").value("hello graph world"))
-                .andExpect(jsonPath("$.createdAt").value("2026-02-26T21:10:00Z"))
-                .andExpect(jsonPath("$.parentId").doesNotExist())
-                .andExpect(jsonPath("$.rootId").value(postId.toString()))
-                .andExpect(jsonPath("$.replyCount").value(0))
-                .andExpect(jsonPath("$.likeCount").value(2))
-                .andExpect(jsonPath("$.likedByMe").value(true));
-    }
-
-    @Test
-    void createReplyReturnsCreatedBodyAndLocation() throws Exception {
-        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
-        UUID parentId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
-        UUID rootId = UUID.fromString("dc4a2480-0619-4512-8733-fb30bcf8dca8");
-        UUID replyId = UUID.fromString("bbdd2f10-c028-4058-b7f6-f0e74f0ed78d");
-        Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
-
-        PostResponse response = new PostResponse(
-                replyId,
-                userId,
-                "Eduardo",
-                "reply content",
-                createdAt,
-                parentId,
-                rootId,
-                0,
-                0,
-                false
-        );
-        when(idempotencyService.execute(
-                eq(userId),
-                any(),
-                eq("/posts/" + parentId + "/reply"),
-                any(),
-                eq(201),
-                eq(PostResponse.class),
-                any())
-        ).thenReturn(response);
-
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId, UserRole.USER),
-                null,
-                Collections.emptyList()
-        );
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        CreatePostRequest request = new CreatePostRequest("reply content");
-        try {
-            mockMvc.perform(post("/posts/{id}/reply", parentId)
-                            .with(authentication(authentication))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isCreated())
-                    .andExpect(header().string("Location", "/posts/" + replyId))
-                    .andExpect(jsonPath("$.id").value(replyId.toString()))
-                    .andExpect(jsonPath("$.authorId").value(userId.toString()))
-                    .andExpect(jsonPath("$.authorName").value("Eduardo"))
-                    .andExpect(jsonPath("$.content").value("reply content"))
-                    .andExpect(jsonPath("$.createdAt").value("2026-02-26T21:10:00Z"))
-                    .andExpect(jsonPath("$.parentId").value(parentId.toString()))
-                    .andExpect(jsonPath("$.rootId").value(rootId.toString()))
-                    .andExpect(jsonPath("$.replyCount").value(0))
-                    .andExpect(jsonPath("$.likeCount").value(0))
-                    .andExpect(jsonPath("$.likedByMe").value(false));
-        } finally {
-            SecurityContextHolder.clearContext();
+                mockMvc.perform(get("/posts/{id}", postId))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.id").value(postId.toString()))
+                                .andExpect(jsonPath("$.authorId").value(userId.toString()))
+                                .andExpect(jsonPath("$.authorName").value("Eduardo"))
+                                .andExpect(jsonPath("$.authorRole").value("MOD"))
+                                .andExpect(jsonPath("$.content").value("hello graph world"))
+                                .andExpect(jsonPath("$.createdAt").value("2026-02-26T21:10:00Z"))
+                                .andExpect(jsonPath("$.parentId").doesNotExist())
+                                .andExpect(jsonPath("$.rootId").value(postId.toString()))
+                                .andExpect(jsonPath("$.replyCount").value(0))
+                                .andExpect(jsonPath("$.likeCount").value(2))
+                                .andExpect(jsonPath("$.likedByMe").value(true));
         }
-    }
 
-    @Test
-    void createReplyReturnsNotFoundWhenParentDoesNotExist() throws Exception {
-        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
-        UUID parentId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+        @Test
+        void getThreadReturnsAncestorsFocusAndReplies() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                UUID postId = UUID.fromString("bbdd2f10-c028-4058-b7f6-f0e74f0ed78d");
+                UUID rootId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+                UUID replyId = UUID.fromString("dc4a2480-0619-4512-8733-fb30bcf8dca8");
+                Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
 
-        when(idempotencyService.execute(
-                eq(userId),
-                any(),
-                eq("/posts/" + parentId + "/reply"),
-                any(),
-                eq(201),
-                eq(PostResponse.class),
-                any()))
-                .thenThrow(new ResourceNotFoundException("Post not found"));
+                PostResponse root = new PostResponse(rootId, userId, "Eduardo", "", UserRole.USER, "root post",
+                                createdAt,
+                                null, null, rootId, 1, 2, false);
+                PostResponse focus = new PostResponse(postId, userId, "Eduardo", "", UserRole.USER, "focus post",
+                                createdAt,
+                                null, rootId, rootId, 1, 1, false);
+                PostResponse reply = new PostResponse(replyId, userId, "Eduardo", "", UserRole.USER, "reply post",
+                                createdAt, null, postId, rootId, 0, 0, true);
 
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId, UserRole.USER),
-                null,
-                Collections.emptyList()
-        );
-        SecurityContextHolder.getContext().setAuthentication(authentication);
+                PostThreadResponse response = new PostThreadResponse(
+                                List.of(root),
+                                focus,
+                                List.of(new ThreadNodeResponse(reply, List.of())));
+                when(postThreadService.getThread(postId, null, 4)).thenReturn(response);
 
-        CreatePostRequest request = new CreatePostRequest("reply content");
-        try {
-            mockMvc.perform(post("/posts/{id}/reply", parentId)
-                            .with(authentication(authentication))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isNotFound())
-                    .andExpect(header().string("Content-Type", "application/problem+json"))
-                    .andExpect(jsonPath("$.title").value("Not Found"))
-                    .andExpect(jsonPath("$.status").value(404))
-                    .andExpect(jsonPath("$.detail").value("Post not found"));
-        } finally {
-            SecurityContextHolder.clearContext();
+                mockMvc.perform(get("/posts/{id}/thread", postId))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.ancestors.length()").value(1))
+                                .andExpect(jsonPath("$.ancestors[0].id").value(rootId.toString()))
+                                .andExpect(jsonPath("$.focus.authorRole").value("USER"))
+                                .andExpect(jsonPath("$.focus.id").value(postId.toString()))
+                                .andExpect(jsonPath("$.focus.parentId").value(rootId.toString()))
+                                .andExpect(jsonPath("$.replies.length()").value(1))
+                                .andExpect(jsonPath("$.replies[0].post.id").value(replyId.toString()))
+                                .andExpect(jsonPath("$.replies[0].post.likedByMe").value(true));
         }
-    }
 
-    @Test
-    void createReplyReturnsBadRequestWhenUuidIsInvalid() throws Exception {
-        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId, UserRole.USER),
-                null,
-                Collections.emptyList()
-        );
-        SecurityContextHolder.getContext().setAuthentication(authentication);
+        @Test
+        void getRelatedPostsReturnsList() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                UUID postId = UUID.fromString("bbdd2f10-c028-4058-b7f6-f0e74f0ed78d");
+                UUID relatedId = UUID.fromString("dc4a2480-0619-4512-8733-fb30bcf8dca8");
+                Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
 
-        CreatePostRequest request = new CreatePostRequest("reply content");
-        try {
-            mockMvc.perform(post("/posts/{id}/reply", "not-a-uuid")
-                            .with(authentication(authentication))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(header().string("Content-Type", "application/problem+json"))
-                    .andExpect(jsonPath("$.title").value("Bad Request"))
-                    .andExpect(jsonPath("$.status").value(400))
-                    .andExpect(jsonPath("$.detail").value("Invalid value for id"));
-        } finally {
-            SecurityContextHolder.clearContext();
+                RelatedPostResponse related = new RelatedPostResponse(
+                                relatedId,
+                                userId,
+                                "Eduardo",
+                                UserRole.USER,
+                                "related conversation root",
+                                createdAt,
+                                null,
+                                null,
+                                relatedId,
+                                2,
+                                3,
+                                false,
+                                0.818,
+                                List.of("related", "conversation"),
+                                "Embedding match around: related, conversation");
+
+                when(relatedPostsService.getRelatedPosts(postId, null, 6)).thenReturn(List.of(related));
+
+                mockMvc.perform(get("/posts/{id}/related", postId))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.length()").value(1))
+                                .andExpect(jsonPath("$[0].id").value(relatedId.toString()))
+                                .andExpect(jsonPath("$[0].rootId").value(relatedId.toString()))
+                                .andExpect(jsonPath("$[0].authorRole").value("USER"))
+                                .andExpect(jsonPath("$[0].content").value("related conversation root"))
+                                .andExpect(jsonPath("$[0].topicReason")
+                                                .value("Embedding match around: related, conversation"));
         }
-    }
 
-    @Test
-    void likePostReturnsUpdatedBody() throws Exception {
-        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
-        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
-        Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
+        @Test
+        void createReplyReturnsCreatedBodyAndLocation() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                UUID parentId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+                UUID rootId = UUID.fromString("dc4a2480-0619-4512-8733-fb30bcf8dca8");
+                UUID replyId = UUID.fromString("bbdd2f10-c028-4058-b7f6-f0e74f0ed78d");
+                Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
 
-        PostResponse response = new PostResponse(
-                postId,
-                userId,
-                "Eduardo",
-                "hello graph world",
-                createdAt,
-                null,
-                postId,
-                0,
-                1,
-                true
-        );
-        when(idempotencyService.execute(
-                eq(userId),
-                any(),
-                eq("/posts/" + postId + "/likes"),
-                any(),
-                eq(200),
-                eq(PostResponse.class),
-                any())
-        ).thenReturn(response);
+                PostResponse response = new PostResponse(
+                                replyId,
+                                userId,
+                                "Eduardo",
+                                "",
+                                UserRole.USER,
+                                "reply content",
+                                createdAt,
+                                null,
+                                parentId,
+                                rootId,
+                                0,
+                                0,
+                                false);
+                when(idempotencyService.execute(
+                                eq(userId),
+                                any(),
+                                eq("/posts/" + parentId + "/reply"),
+                                any(),
+                                eq(201),
+                                eq(PostResponse.class),
+                                any())).thenReturn(response);
 
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId, UserRole.USER),
-                null,
-                Collections.emptyList()
-        );
-        SecurityContextHolder.getContext().setAuthentication(authentication);
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                                new AuthenticatedUser(userId, UserRole.USER),
+                                null,
+                                Collections.emptyList());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        try {
-            mockMvc.perform(post("/posts/{id}/likes", postId).with(authentication(authentication)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.id").value(postId.toString()))
-                    .andExpect(jsonPath("$.likeCount").value(1))
-                    .andExpect(jsonPath("$.likedByMe").value(true));
-        } finally {
-            SecurityContextHolder.clearContext();
+                CreatePostRequest request = new CreatePostRequest("reply content");
+                try {
+                        mockMvc.perform(post("/posts/{id}/reply", parentId)
+                                        .with(authentication(authentication))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(objectMapper.writeValueAsString(request)))
+                                        .andExpect(status().isCreated())
+                                        .andExpect(header().string("Location", "/posts/" + replyId))
+                                        .andExpect(jsonPath("$.id").value(replyId.toString()))
+                                        .andExpect(jsonPath("$.authorId").value(userId.toString()))
+                                        .andExpect(jsonPath("$.authorName").value("Eduardo"))
+                                        .andExpect(jsonPath("$.authorRole").value("USER"))
+                                        .andExpect(jsonPath("$.content").value("reply content"))
+                                        .andExpect(jsonPath("$.createdAt").value("2026-02-26T21:10:00Z"))
+                                        .andExpect(jsonPath("$.parentId").value(parentId.toString()))
+                                        .andExpect(jsonPath("$.rootId").value(rootId.toString()))
+                                        .andExpect(jsonPath("$.replyCount").value(0))
+                                        .andExpect(jsonPath("$.likeCount").value(0))
+                                        .andExpect(jsonPath("$.likedByMe").value(false));
+                } finally {
+                        SecurityContextHolder.clearContext();
+                }
         }
-    }
 
-    @Test
-    void unlikePostReturnsUpdatedBody() throws Exception {
-        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
-        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
-        Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
+        @Test
+        void createReplyReturnsNotFoundWhenParentDoesNotExist() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                UUID parentId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
 
-        PostResponse response = new PostResponse(
-                postId,
-                userId,
-                "Eduardo",
-                "hello graph world",
-                createdAt,
-                null,
-                postId,
-                0,
-                0,
-                false
-        );
-        when(idempotencyService.execute(
-                eq(userId),
-                any(),
-                eq("/posts/" + postId + "/likes"),
-                any(),
-                eq(200),
-                eq(PostResponse.class),
-                any())
-        ).thenReturn(response);
+                when(idempotencyService.execute(
+                                eq(userId),
+                                any(),
+                                eq("/posts/" + parentId + "/reply"),
+                                any(),
+                                eq(201),
+                                eq(PostResponse.class),
+                                any()))
+                                .thenThrow(new ResourceNotFoundException("Post not found"));
 
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId, UserRole.USER),
-                null,
-                Collections.emptyList()
-        );
-        SecurityContextHolder.getContext().setAuthentication(authentication);
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                                new AuthenticatedUser(userId, UserRole.USER),
+                                null,
+                                Collections.emptyList());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        try {
-            mockMvc.perform(delete("/posts/{id}/likes", postId).with(authentication(authentication)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.id").value(postId.toString()))
-                    .andExpect(jsonPath("$.likeCount").value(0))
-                    .andExpect(jsonPath("$.likedByMe").value(false));
-        } finally {
-            SecurityContextHolder.clearContext();
+                CreatePostRequest request = new CreatePostRequest("reply content");
+                try {
+                        mockMvc.perform(post("/posts/{id}/reply", parentId)
+                                        .with(authentication(authentication))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(objectMapper.writeValueAsString(request)))
+                                        .andExpect(status().isNotFound())
+                                        .andExpect(header().string("Content-Type", "application/problem+json"))
+                                        .andExpect(jsonPath("$.title").value("Not Found"))
+                                        .andExpect(jsonPath("$.status").value(404))
+                                        .andExpect(jsonPath("$.detail").value("Post not found"));
+                } finally {
+                        SecurityContextHolder.clearContext();
+                }
         }
-    }
 
-    @Test
-    void updatePostReturnsUpdatedBody() throws Exception {
-        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
-        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
-        Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
+        @Test
+        void createReplyReturnsBadRequestWhenUuidIsInvalid() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                                new AuthenticatedUser(userId, UserRole.USER),
+                                null,
+                                Collections.emptyList());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        PostResponse response = new PostResponse(
-                postId,
-                userId,
-                "Eduardo",
-                "updated content",
-                createdAt,
-                null,
-                postId,
-                0,
-                0,
-                false
-        );
-        when(postService.updatePost(eq(userId), eq(postId), any(UpdatePostRequest.class))).thenReturn(response);
-
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId, UserRole.USER),
-                null,
-                Collections.emptyList()
-        );
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        try {
-            mockMvc.perform(patch("/posts/{id}", postId)
-                            .with(authentication(authentication))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(new UpdatePostRequest("updated content"))))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.id").value(postId.toString()))
-                    .andExpect(jsonPath("$.content").value("updated content"));
-        } finally {
-            SecurityContextHolder.clearContext();
+                CreatePostRequest request = new CreatePostRequest("reply content");
+                try {
+                        mockMvc.perform(post("/posts/{id}/reply", "not-a-uuid")
+                                        .with(authentication(authentication))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(objectMapper.writeValueAsString(request)))
+                                        .andExpect(status().isBadRequest())
+                                        .andExpect(header().string("Content-Type", "application/problem+json"))
+                                        .andExpect(jsonPath("$.title").value("Bad Request"))
+                                        .andExpect(jsonPath("$.status").value(400))
+                                        .andExpect(jsonPath("$.detail").value("Invalid value for id"));
+                } finally {
+                        SecurityContextHolder.clearContext();
+                }
         }
-    }
 
-    @Test
-    void deletePostReturnsNoContent() throws Exception {
-        UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
-        UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+        @Test
+        void likePostReturnsUpdatedBody() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+                Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
 
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                new AuthenticatedUser(userId, UserRole.USER),
-                null,
-                Collections.emptyList()
-        );
-        SecurityContextHolder.getContext().setAuthentication(authentication);
+                PostResponse response = new PostResponse(
+                                postId,
+                                userId,
+                                "Eduardo",
+                                "",
+                                UserRole.USER,
+                                "hello graph world",
+                                createdAt,
+                                null,
+                                null,
+                                postId,
+                                0,
+                                1,
+                                true);
+                when(idempotencyService.execute(
+                                eq(userId),
+                                any(),
+                                eq("/posts/" + postId + "/likes"),
+                                any(),
+                                eq(200),
+                                eq(PostResponse.class),
+                                any())).thenReturn(response);
 
-        try {
-            mockMvc.perform(delete("/posts/{id}", postId).with(authentication(authentication)))
-                    .andExpect(status().isNoContent());
-        } finally {
-            SecurityContextHolder.clearContext();
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                                new AuthenticatedUser(userId, UserRole.USER),
+                                null,
+                                Collections.emptyList());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                try {
+                        mockMvc.perform(post("/posts/{id}/likes", postId).with(authentication(authentication)))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$.id").value(postId.toString()))
+                                        .andExpect(jsonPath("$.likeCount").value(1))
+                                        .andExpect(jsonPath("$.likedByMe").value(true));
+                } finally {
+                        SecurityContextHolder.clearContext();
+                }
         }
-    }
+
+        @Test
+        void unlikePostReturnsUpdatedBody() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+                Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
+
+                PostResponse response = new PostResponse(
+                                postId,
+                                userId,
+                                "Eduardo",
+                                "",
+                                UserRole.USER,
+                                "hello graph world",
+                                createdAt,
+                                null,
+                                null,
+                                postId,
+                                0,
+                                0,
+                                false);
+                when(idempotencyService.execute(
+                                eq(userId),
+                                any(),
+                                eq("/posts/" + postId + "/likes"),
+                                any(),
+                                eq(200),
+                                eq(PostResponse.class),
+                                any())).thenReturn(response);
+
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                                new AuthenticatedUser(userId, UserRole.USER),
+                                null,
+                                Collections.emptyList());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                try {
+                        mockMvc.perform(delete("/posts/{id}/likes", postId).with(authentication(authentication)))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$.id").value(postId.toString()))
+                                        .andExpect(jsonPath("$.likeCount").value(0))
+                                        .andExpect(jsonPath("$.likedByMe").value(false));
+                } finally {
+                        SecurityContextHolder.clearContext();
+                }
+        }
+
+        @Test
+        void updatePostReturnsUpdatedBody() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+                Instant createdAt = Instant.parse("2026-02-26T21:10:00Z");
+
+                PostResponse response = new PostResponse(
+                                postId,
+                                userId,
+                                "Eduardo",
+                                "",
+                                UserRole.USER,
+                                "updated content",
+                                createdAt,
+                                Instant.parse("2026-02-28T21:10:00Z"),
+                                null,
+                                postId,
+                                0,
+                                0,
+                                false);
+                when(postService.updatePost(eq(userId), eq(postId), any(UpdatePostRequest.class))).thenReturn(response);
+
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                                new AuthenticatedUser(userId, UserRole.USER),
+                                null,
+                                Collections.emptyList());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                try {
+                        mockMvc.perform(patch("/posts/{id}", postId)
+                                        .with(authentication(authentication))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(objectMapper
+                                                        .writeValueAsString(new UpdatePostRequest("updated content"))))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$.id").value(postId.toString()))
+                                        .andExpect(jsonPath("$.content").value("updated content"));
+                } finally {
+                        SecurityContextHolder.clearContext();
+                }
+        }
+
+        @Test
+        void deletePostReturnsNoContent() throws Exception {
+                UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
+                UUID postId = UUID.fromString("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
+
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                                new AuthenticatedUser(userId, UserRole.USER),
+                                null,
+                                Collections.emptyList());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                try {
+                        mockMvc.perform(delete("/posts/{id}", postId).with(authentication(authentication)))
+                                        .andExpect(status().isNoContent());
+                } finally {
+                        SecurityContextHolder.clearContext();
+                }
+        }
 }

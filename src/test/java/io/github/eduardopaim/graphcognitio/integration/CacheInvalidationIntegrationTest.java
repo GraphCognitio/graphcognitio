@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.eduardopaim.graphcognitio.cache.CacheKeys;
+import io.github.eduardopaim.graphcognitio.graphs.GraphMode;
+import io.github.eduardopaim.graphcognitio.posts.dto.FeedSort;
 import java.nio.charset.StandardCharsets;
 import java.util.TimeZone;
 import java.util.UUID;
@@ -28,7 +30,6 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 @Testcontainers
 @SpringBootTest
@@ -43,7 +44,7 @@ class CacheInvalidationIntegrationTest {
     }
 
     @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(DockerImageName.parse("postgres:18"))
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(PgvectorTestSupport.PGVECTOR_POSTGRES)
             .withDatabaseName("graphcognitio")
             .withUsername("graphcognitio")
             .withPassword("graphcognitio_dev_password");
@@ -70,7 +71,7 @@ class CacheInvalidationIntegrationTest {
     void createRootPostEvictsFeedCache() throws Exception {
         AuthContext auth = registerAndLogin();
         Cache feedCache = requireCache("feedCache");
-        String feedKey = CacheKeys.feed(null, 20, auth.userId());
+        String feedKey = CacheKeys.feed(null, 20, auth.userId(), FeedSort.RECENT);
 
         assertNull(feedCache.get(feedKey));
 
@@ -102,7 +103,7 @@ class CacheInvalidationIntegrationTest {
         String rootId = createRootPost(auth.accessToken(), "Root post for graph cache invalidation");
         createReply(auth.accessToken(), rootId, "First reply");
 
-        String graphKey = CacheKeys.graph(UUID.fromString(rootId), 2, 120);
+        String graphKey = CacheKeys.graph(UUID.fromString(rootId), 2, 120, GraphMode.CONVERSATION);
         assertNull(graphCache.get(graphKey));
 
         mockMvc.perform(get("/graphs/conversation/{rootId}", rootId)

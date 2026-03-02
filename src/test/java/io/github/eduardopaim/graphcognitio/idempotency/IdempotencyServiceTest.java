@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.eduardopaim.graphcognitio.entity.IdempotencyKeyEntity;
+import io.github.eduardopaim.graphcognitio.entity.UserRole;
 import io.github.eduardopaim.graphcognitio.exception.ConflictException;
 import io.github.eduardopaim.graphcognitio.posts.dto.PostResponse;
 import java.time.Clock;
@@ -31,8 +32,7 @@ class IdempotencyServiceTest {
                 store,
                 properties,
                 new ObjectMapper().findAndRegisterModules(),
-                clock
-        );
+                clock);
 
         UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
         AtomicInteger supplierCalls = new AtomicInteger(0);
@@ -47,8 +47,7 @@ class IdempotencyServiceTest {
                 () -> {
                     supplierCalls.incrementAndGet();
                     return postResponse("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c");
-                }
-        );
+                });
         PostResponse second = service.execute(
                 userId,
                 "idem-1",
@@ -59,8 +58,7 @@ class IdempotencyServiceTest {
                 () -> {
                     supplierCalls.incrementAndGet();
                     return postResponse("aaaaaaaa-5485-4f95-a9c0-1723a49bfd7c");
-                }
-        );
+                });
 
         assertEquals(1, supplierCalls.get());
         assertEquals(first.id(), second.id());
@@ -78,8 +76,7 @@ class IdempotencyServiceTest {
                 store,
                 properties,
                 new ObjectMapper().findAndRegisterModules(),
-                clock
-        );
+                clock);
 
         UUID userId = UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55");
         service.execute(
@@ -89,8 +86,7 @@ class IdempotencyServiceTest {
                 Map.of("content", "hello"),
                 201,
                 PostResponse.class,
-                () -> postResponse("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c")
-        );
+                () -> postResponse("2fbf8f22-5485-4f95-a9c0-1723a49bfd7c"));
 
         ConflictException exception = assertThrows(
                 ConflictException.class,
@@ -101,9 +97,7 @@ class IdempotencyServiceTest {
                         Map.of("content", "different"),
                         201,
                         PostResponse.class,
-                        () -> postResponse("aaaaaaaa-5485-4f95-a9c0-1723a49bfd7c")
-                )
-        );
+                        () -> postResponse("aaaaaaaa-5485-4f95-a9c0-1723a49bfd7c")));
 
         assertEquals("Idempotency-Key already used with different request", exception.getMessage());
     }
@@ -114,14 +108,16 @@ class IdempotencyServiceTest {
                 id,
                 UUID.fromString("d6a63297-3f0f-4da4-9014-097bb6ebcb55"),
                 "Eduardo",
+                "",
+                UserRole.USER,
                 "hello",
                 Instant.parse("2026-02-27T12:00:00Z"),
+                null,
                 null,
                 id,
                 0,
                 0,
-                false
-        );
+                false);
     }
 
     private static class InMemoryIdempotencyStore implements IdempotencyStore {

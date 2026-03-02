@@ -14,13 +14,16 @@ import io.github.eduardopaim.graphcognitio.exception.ResourceNotFoundException;
 import io.github.eduardopaim.graphcognitio.exception.UnauthorizedException;
 import io.github.eduardopaim.graphcognitio.posts.dto.CreatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.dto.FeedResponse;
+import io.github.eduardopaim.graphcognitio.posts.dto.FeedSort;
 import io.github.eduardopaim.graphcognitio.posts.dto.PostResponse;
 import io.github.eduardopaim.graphcognitio.posts.dto.UpdatePostRequest;
 import io.github.eduardopaim.graphcognitio.posts.mapper.PostMapper;
 import io.github.eduardopaim.graphcognitio.repository.EdgeRepository;
+import io.github.eduardopaim.graphcognitio.repository.PostFeedProjection;
 import io.github.eduardopaim.graphcognitio.repository.PostLikeRepository;
 import io.github.eduardopaim.graphcognitio.repository.PostRepository;
 import io.github.eduardopaim.graphcognitio.repository.UserRepository;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -49,19 +52,25 @@ public class PostService {
     private final PostLikeRepository postLikeRepository;
     private final PostMapper postMapper;
     private final AuditLogService auditLogService;
+    private final TopicDiscoveryService topicDiscoveryService;
+    private final PostEmbeddingService postEmbeddingService;
 
     public PostService(PostRepository postRepository,
-                       UserRepository userRepository,
-                       EdgeRepository edgeRepository,
-                       PostLikeRepository postLikeRepository,
-                       PostMapper postMapper,
-                       AuditLogService auditLogService) {
+            UserRepository userRepository,
+            EdgeRepository edgeRepository,
+            PostLikeRepository postLikeRepository,
+            PostMapper postMapper,
+            AuditLogService auditLogService,
+            TopicDiscoveryService topicDiscoveryService,
+            PostEmbeddingService postEmbeddingService) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.edgeRepository = edgeRepository;
         this.postLikeRepository = postLikeRepository;
         this.postMapper = postMapper;
         this.auditLogService = auditLogService;
+        this.topicDiscoveryService = topicDiscoveryService;
+        this.postEmbeddingService = postEmbeddingService;
     }
 
     @Transactional
@@ -86,9 +95,10 @@ public class PostService {
                 "POST_CREATED",
                 "POST",
                 saved.getId(),
-                Map.of("isRoot", true)
-        );
-        return postMapper.toResponse(saved, author.getName(), false);
+                Map.of("isRoot", true));
+        postEmbeddingService.indexPost(saved);
+        return postMapper.toResponse(saved, author.getName(), author.getUsername(), author.getRole(), false,
+                topicKeywordsForContent(saved.getContent()));
     }
 
     @Transactional
@@ -131,11 +141,11 @@ public class PostService {
                 savedReply.getId(),
                 Map.of(
                         "parentPostId", parentPost.getId().toString(),
-                        "rootId", savedReply.getRootId().toString()
-                )
-        );
+                        "rootId", savedReply.getRootId().toString()));
 
-        return postMapper.toResponse(savedReply, author.getName(), false);
+        postEmbeddingService.indexPost(savedReply);
+        return postMapper.toResponse(savedReply, author.getName(), author.getUsername(), author.getRole(), false,
+                topicKeywordsForContent(savedReply.getContent()));
     }
 
     @Transactional(readOnly = true)
@@ -143,20 +153,25 @@ public class PostService {
         PostEntity post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
-        String authorName = userRepository.findById(post.getAuthorId())
-                .map(UserEntity::getName)
+        UserEntity author = userRepository.findById(post.getAuthorId())
                 .orElseThrow(() -> new ResourceNotFoundException("Author not found"));
 
         boolean likedByMe = viewerId != null && postLikeRepository.existsByPostIdAndUserId(postId, viewerId);
-        return postMapper.toResponse(post, authorName, likedByMe);
+        return postMapper.toResponse(post, author.getName(), author.getUsername(), author.getRole(), likedByMe,
+                topicKeywordsForContent(post.getContent()));
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(
-            cacheNames = "feedCache",
-            key = "T(io.github.eduardopaim.graphcognitio.cache.CacheKeys).feed(#cursor, #limit, #viewerId)"
-    )
-    public FeedResponse getFeed(String cursor, int limit, UUID viewerId) {
+    @Cacheable(cacheNames = "feedCache", key = "T(io.github.eduardopaim.graphcognitio.cache.CacheKeys).feed(#cursor, #limit, #viewerId, #sort)")
+    public FeedResponse getFeed(String cursor, int limit, UUID viewerId, FeedSort sort) {
+        FeedSort resolvedSort = sort == null ? FeedSort.RECENT : sort;
+        if (resolvedSort == FeedSort.RELEVANT) {
+            return getRelevantFeed(cursor, limit, viewerId);
+        }
+        return getRecentFeed(cursor, limit, viewerId);
+    }
+
+    private FeedResponse getRecentFeed(String cursor, int limit, UUID viewerId) {
         CursorKey cursorKey = decodeCursor(cursor);
         Pageable pageable = PageRequest.of(0, limit + 1);
 
@@ -167,26 +182,112 @@ public class PostService {
             page = postRepository.findRootPostsAfterCursor(
                     cursorKey.createdAt(),
                     cursorKey.id(),
-                    pageable
-            );
+                    pageable);
         }
 
         boolean hasMore = page.size() > limit;
         List<PostEntity> currentItems = hasMore ? new ArrayList<>(page.subList(0, limit)) : page;
-        Map<UUID, String> authorNames = loadAuthorNames(currentItems);
+        Map<UUID, AuthorDetails> authorDetails = loadAuthorDetails(currentItems);
         Set<UUID> likedPostIds = loadLikedPostIds(viewerId, currentItems);
         List<PostResponse> items = currentItems.stream()
                 .map(post -> postMapper.toResponse(
                         post,
-                        authorNames.get(post.getAuthorId()),
-                        likedPostIds.contains(post.getId())
-                ))
+                        authorDetails.get(post.getAuthorId()).name(),
+                        authorDetails.get(post.getAuthorId()).username(),
+                        authorDetails.get(post.getAuthorId()).role(),
+                        likedPostIds.contains(post.getId()),
+                        topicKeywordsForContent(post.getContent())))
                 .toList();
 
         String nextCursor = null;
         if (hasMore && !currentItems.isEmpty()) {
             PostEntity lastPost = currentItems.get(currentItems.size() - 1);
             nextCursor = encodeCursor(lastPost.getCreatedAt(), lastPost.getId());
+        }
+
+        return new FeedResponse(items, nextCursor);
+    }
+
+    public FeedResponse getUserFeed(String username, String cursor, int limit, UUID viewerId) {
+        CursorKey cursorKey = decodeCursor(cursor);
+        Pageable pageable = PageRequest.of(0, limit + 1);
+
+        List<PostEntity> page;
+        if (cursorKey == null) {
+            page = postRepository.findRootPostsByUsernameWithoutCursor(username, pageable);
+        } else {
+            page = postRepository.findRootPostsByUsernameAfterCursor(
+                    username,
+                    cursorKey.createdAt(),
+                    cursorKey.id(),
+                    pageable);
+        }
+
+        boolean hasMore = page.size() > limit;
+        List<PostEntity> currentItems = hasMore ? new ArrayList<>(page.subList(0, limit)) : page;
+        Map<UUID, AuthorDetails> authorDetails = loadAuthorDetails(currentItems);
+        Set<UUID> likedPostIds = loadLikedPostIds(viewerId, currentItems);
+        List<PostResponse> items = currentItems.stream()
+                .map(post -> postMapper.toResponse(
+                        post,
+                        authorDetails.get(post.getAuthorId()).name(),
+                        authorDetails.get(post.getAuthorId()).username(),
+                        authorDetails.get(post.getAuthorId()).role(),
+                        likedPostIds.contains(post.getId()),
+                        topicKeywordsForContent(post.getContent())))
+                .toList();
+
+        String nextCursor = null;
+        if (hasMore && !currentItems.isEmpty()) {
+            PostEntity lastPost = currentItems.get(currentItems.size() - 1);
+            nextCursor = encodeCursor(lastPost.getCreatedAt(), lastPost.getId());
+        }
+
+        return new FeedResponse(items, nextCursor);
+    }
+
+    private FeedResponse getRelevantFeed(String cursor, int limit, UUID viewerId) {
+        RelevantCursorKey cursorKey = decodeRelevantCursor(cursor);
+
+        List<PostFeedProjection> page = postRepository.findRelevantRootPosts(
+                cursorKey == null ? null : cursorKey.score(),
+                cursorKey == null ? null : cursorKey.createdAt(),
+                cursorKey == null ? null : cursorKey.id(),
+                limit + 1);
+
+        boolean hasMore = page.size() > limit;
+        List<PostFeedProjection> currentItems = hasMore ? new ArrayList<>(page.subList(0, limit)) : page;
+        Map<UUID, AuthorDetails> authorDetails = loadAuthorDetails(currentItems.stream()
+                .map(PostFeedProjection::getAuthorId)
+                .collect(Collectors.toSet()));
+        Set<UUID> likedPostIds = loadLikedPostIds(viewerId, currentItems.stream()
+                .map(PostFeedProjection::getId)
+                .collect(Collectors.toSet()));
+
+        List<PostResponse> items = currentItems.stream()
+                .map(post -> new PostResponse(
+                        post.getId(),
+                        post.getAuthorId(),
+                        authorDetails.get(post.getAuthorId()).name(),
+                        authorDetails.get(post.getAuthorId()).username(),
+                        authorDetails.get(post.getAuthorId()).role(),
+                        post.getContent(),
+                        post.getCreatedAt(),
+                        post.getUpdatedAt(),
+                        post.getParentId(),
+                        post.getRootId(),
+                        post.getReplyCount(),
+                        post.getLikeCount(),
+                        likedPostIds.contains(post.getId()),
+                        topicKeywordsForContent(post.getContent()),
+                        post.getFeedScore().doubleValue(),
+                        buildRelevantSignals(post)))
+                .toList();
+
+        String nextCursor = null;
+        if (hasMore && !currentItems.isEmpty()) {
+            PostFeedProjection lastPost = currentItems.get(currentItems.size() - 1);
+            nextCursor = encodeRelevantCursor(lastPost.getFeedScore(), lastPost.getCreatedAt(), lastPost.getId());
         }
 
         return new FeedResponse(items, nextCursor);
@@ -219,12 +320,12 @@ public class PostService {
                     "POST_LIKED",
                     "POST",
                     postId,
-                    Map.of("authorId", post.getAuthorId().toString())
-            );
+                    Map.of("authorId", post.getAuthorId().toString()));
         }
 
-        String authorName = findAuthorName(post.getAuthorId());
-        return postMapper.toResponse(post, authorName, true);
+        AuthorDetails author = findAuthor(post.getAuthorId());
+        return postMapper.toResponse(post, author.name(), author.username(), author.role(), true,
+                topicKeywordsForContent(post.getContent()));
     }
 
     @Transactional
@@ -247,12 +348,12 @@ public class PostService {
                     "POST_UNLIKED",
                     "POST",
                     postId,
-                    Map.of("authorId", post.getAuthorId().toString())
-            );
+                    Map.of("authorId", post.getAuthorId().toString()));
         });
 
-        String authorName = findAuthorName(post.getAuthorId());
-        return postMapper.toResponse(post, authorName, false);
+        AuthorDetails author = findAuthor(post.getAuthorId());
+        return postMapper.toResponse(post, author.name(), author.username(), author.role(), false,
+                topicKeywordsForContent(post.getContent()));
     }
 
     @Transactional
@@ -277,12 +378,13 @@ public class PostService {
                 "POST_UPDATED",
                 "POST",
                 savedPost.getId(),
-                Map.of("authorId", savedPost.getAuthorId().toString())
-        );
+                Map.of("authorId", savedPost.getAuthorId().toString()));
 
+        postEmbeddingService.indexPost(savedPost);
         boolean likedByMe = postLikeRepository.existsByPostIdAndUserId(savedPost.getId(), actor.getId());
-        String authorName = findAuthorName(savedPost.getAuthorId());
-        return postMapper.toResponse(savedPost, authorName, likedByMe);
+        AuthorDetails author = findAuthor(savedPost.getAuthorId());
+        return postMapper.toResponse(savedPost, author.name(), author.username(), author.role(), likedByMe,
+                topicKeywordsForContent(savedPost.getContent()));
     }
 
     @Transactional
@@ -320,9 +422,7 @@ public class PostService {
                 postId,
                 Map.of(
                         "postAuthorId", post.getAuthorId().toString(),
-                        "deletedByRole", actor.getRole().name()
-                )
-        );
+                        "deletedByRole", actor.getRole().name()));
     }
 
     private UUID resolveRootId(PostEntity parentPost) {
@@ -332,37 +432,74 @@ public class PostService {
         return parentPost.getRootId();
     }
 
-    private Map<UUID, String> loadAuthorNames(List<PostEntity> posts) {
-        Set<UUID> authorIds = posts.stream()
-                .map(PostEntity::getAuthorId)
-                .collect(Collectors.toSet());
+    private List<String> topicKeywordsForContent(String content) {
+        return topicDiscoveryService.deriveTopicKeywords(content);
+    }
 
-        Map<UUID, String> authorNames = new HashMap<>();
-        userRepository.findAllById(authorIds).forEach(author -> authorNames.put(author.getId(), author.getName()));
+    private List<String> buildRelevantSignals(PostFeedProjection post) {
+        List<String> signals = new ArrayList<>();
+        if (post.getSemanticDensity() != null && post.getSemanticDensity().doubleValue() >= 0.62) {
+            signals.add("Topic cluster");
+        }
+        if (post.getLikeCount() >= 6) {
+            signals.add("Liked heavily");
+        } else if (post.getLikeCount() >= 2) {
+            signals.add("Liked");
+        }
+        if (post.getReplyCount() >= 4) {
+            signals.add("Active thread");
+        } else if (post.getReplyCount() >= 1) {
+            signals.add("Getting replies");
+        }
+        if (post.getCreatedAt().isAfter(Instant.now().minusSeconds(6 * 60 * 60))) {
+            signals.add("Fresh");
+        } else if (post.getCreatedAt().isAfter(Instant.now().minusSeconds(24 * 60 * 60))) {
+            signals.add("Recent");
+        }
+        return signals.stream().distinct().limit(3).toList();
+    }
+
+    private Map<UUID, AuthorDetails> loadAuthorDetails(List<PostEntity> posts) {
+        return loadAuthorDetails(posts.stream()
+                .map(PostEntity::getAuthorId)
+                .collect(Collectors.toSet()));
+    }
+
+    private Map<UUID, AuthorDetails> loadAuthorDetails(Set<UUID> authorIds) {
+        if (authorIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<UUID, AuthorDetails> authorDetails = new HashMap<>();
+        userRepository.findAllById(authorIds)
+                .forEach(author -> authorDetails.put(author.getId(),
+                        new AuthorDetails(author.getName(), author.getUsername(), author.getRole())));
 
         for (UUID authorId : authorIds) {
-            if (!authorNames.containsKey(authorId)) {
+            if (!authorDetails.containsKey(authorId)) {
                 throw new ResourceNotFoundException("Author not found");
             }
         }
-        return authorNames;
+        return authorDetails;
     }
 
     private Set<UUID> loadLikedPostIds(UUID viewerId, List<PostEntity> posts) {
-        if (viewerId == null || posts.isEmpty()) {
+        return loadLikedPostIds(viewerId, posts.stream()
+                .map(PostEntity::getId)
+                .collect(Collectors.toSet()));
+    }
+
+    private Set<UUID> loadLikedPostIds(UUID viewerId, Set<UUID> postIds) {
+        if (viewerId == null || postIds.isEmpty()) {
             return Set.of();
         }
-
-        Set<UUID> postIds = posts.stream()
-                .map(PostEntity::getId)
-                .collect(Collectors.toSet());
 
         return postLikeRepository.findLikedPostIdsByUserIdAndPostIdIn(viewerId, postIds);
     }
 
-    private String findAuthorName(UUID authorId) {
+    private AuthorDetails findAuthor(UUID authorId) {
         return userRepository.findById(authorId)
-                .map(UserEntity::getName)
+                .map(author -> new AuthorDetails(author.getName(), author.getUsername(), author.getRole()))
                 .orElseThrow(() -> new ResourceNotFoundException("Author not found"));
     }
 
@@ -407,11 +544,47 @@ public class PostService {
                 .encodeToString(raw.getBytes(StandardCharsets.UTF_8));
     }
 
+    private RelevantCursorKey decodeRelevantCursor(String cursor) {
+        if (!StringUtils.hasText(cursor)) {
+            return null;
+        }
+
+        try {
+            String normalized = normalizeBase64(cursor);
+            byte[] decoded = Base64.getUrlDecoder().decode(normalized);
+            String payload = new String(decoded, StandardCharsets.UTF_8);
+            String[] parts = payload.split("\\|", -1);
+            if (parts.length != 3) {
+                throw new BadRequestException("Invalid cursor");
+            }
+
+            BigDecimal score = new BigDecimal(parts[0]);
+            Instant createdAt = Instant.parse(parts[1]);
+            UUID id = UUID.fromString(parts[2]);
+            return new RelevantCursorKey(score, createdAt, id);
+        } catch (IllegalArgumentException | BadRequestException ex) {
+            throw new BadRequestException("Invalid cursor");
+        }
+    }
+
+    private String encodeRelevantCursor(BigDecimal score, Instant createdAt, UUID id) {
+        String raw = score.toPlainString() + "|" + createdAt + "|" + id;
+        return Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+    }
+
     private String normalizeBase64(String value) {
         int padding = (4 - (value.length() % 4)) % 4;
         return value + "=".repeat(padding);
     }
 
     private record CursorKey(Instant createdAt, UUID id) {
+    }
+
+    private record RelevantCursorKey(BigDecimal score, Instant createdAt, UUID id) {
+    }
+
+    private record AuthorDetails(String name, String username, UserRole role) {
     }
 }
