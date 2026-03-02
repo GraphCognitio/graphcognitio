@@ -14,6 +14,8 @@ public interface PostSearchProjection {
 
     Instant getCreatedAt();
 
+    Instant getUpdatedAt();
+
     UUID getParentId();
 
     UUID getRootId();
