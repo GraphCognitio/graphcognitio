@@ -27,9 +27,9 @@ public class AuthService {
     private final AuthUserMapper authUserMapper;
 
     public AuthService(UserRepository userRepository,
-                       PasswordEncoder passwordEncoder,
-                       JwtService jwtService,
-                       AuthUserMapper authUserMapper) {
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService,
+            AuthUserMapper authUserMapper) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -47,13 +47,15 @@ public class AuthService {
         UserEntity user = new UserEntity();
         user.setId(UUID.randomUUID());
         user.setName(request.name().trim());
+        user.setUsername(generateUniqueUsername(user.getName()));
         user.setEmail(normalizedEmail);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRole(UserRole.USER);
         user.setCreatedAt(Instant.now());
 
         UserEntity savedUser = userRepository.save(user);
-        String accessToken = jwtService.generateAccessToken(savedUser.getId(), savedUser.getEmail(), savedUser.getRole());
+        String accessToken = jwtService.generateAccessToken(savedUser.getId(), savedUser.getEmail(),
+                savedUser.getRole());
         AuthUserResponse userResponse = authUserMapper.toResponse(savedUser);
 
         return new AuthResponse(accessToken, userResponse);
@@ -78,5 +80,22 @@ public class AuthService {
 
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String generateUniqueUsername(String name) {
+        String base = name.trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+        if (base.isEmpty()) {
+            base = "user";
+        }
+        if (base.length() > 30) {
+            base = base.substring(0, 30);
+        }
+
+        String candidate = base;
+        while (userRepository.existsByUsername(candidate)) {
+            String suffix = UUID.randomUUID().toString().substring(0, 6);
+            candidate = base + "_" + suffix;
+        }
+        return candidate;
     }
 }
