@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
 import io.github.eduardopaim.graphcognitio.entity.PostEntity;
@@ -70,7 +71,7 @@ class PostThreadServiceTest {
         when(userRepository.findAllById(any())).thenReturn(List.of(author(authorId, "Eduardo")));
         when(postLikeRepository.findLikedPostIdsByUserIdAndPostIdIn(eq(viewerId), any())).thenReturn(Set.of(childId));
         when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "conversation"));
-        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), any(String.class), eq(UserRole.USER),
+        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), isNull(), eq(UserRole.USER),
                 anyBoolean(), anyList()))
                 .thenAnswer(invocation -> {
                     PostEntity post = invocation.getArgument(0);
@@ -109,7 +110,7 @@ class PostThreadServiceTest {
                 .thenReturn(List.of(root, focus, child, grandchild));
         when(userRepository.findAllById(any())).thenReturn(List.of(author(authorId, "Eduardo")));
         when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "conversation"));
-        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), any(String.class), eq(UserRole.USER),
+        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), isNull(), eq(UserRole.USER),
                 anyBoolean(), anyList()))
                 .thenAnswer(invocation -> {
                     PostEntity post = invocation.getArgument(0);

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -104,7 +105,7 @@ class PostServiceTest {
         when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(edgeRepository.save(any(EdgeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "conversation"));
-        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), any(String.class), eq(UserRole.USER),
+        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), isNull(), eq(UserRole.USER),
                 anyBoolean(), anyList()))
                 .thenAnswer(invocation -> {
                     PostEntity post = invocation.getArgument(0);
@@ -174,7 +175,7 @@ class PostServiceTest {
         when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(edgeRepository.save(any(EdgeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "conversation"));
-        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), any(String.class), eq(UserRole.USER),
+        when(postMapper.toResponse(any(PostEntity.class), eq("Eduardo"), isNull(), eq(UserRole.USER),
                 anyBoolean(), anyList()))
                 .thenAnswer(invocation -> {
                     PostEntity post = invocation.getArgument(0);
@@ -239,10 +240,10 @@ class PostServiceTest {
                 author(authorOneId, "Author One"),
                 author(authorTwoId, "Author Two")));
         when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "context"));
-        when(postMapper.toResponse(eq(first), eq("Author One"), any(String.class), eq(UserRole.USER), eq(false),
+        when(postMapper.toResponse(eq(first), eq("Author One"), isNull(), eq(UserRole.USER), eq(false),
                 anyList()))
                 .thenReturn(toResponse(first, "Author One", UserRole.USER, false));
-        when(postMapper.toResponse(eq(second), eq("Author Two"), any(String.class), eq(UserRole.USER), eq(true),
+        when(postMapper.toResponse(eq(second), eq("Author Two"), isNull(), eq(UserRole.USER), eq(true),
                 anyList()))
                 .thenReturn(toResponse(second, "Author Two", UserRole.USER, true));
         when(postLikeRepository.findLikedPostIdsByUserIdAndPostIdIn(eq(authorOneId), any()))
@@ -270,7 +271,7 @@ class PostServiceTest {
                 .thenReturn(List.of(post));
         when(userRepository.findAllById(any())).thenReturn(List.of(author(authorId, "Author One")));
         when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "context"));
-        when(postMapper.toResponse(eq(post), eq("Author One"), any(String.class), eq(UserRole.USER), eq(false),
+        when(postMapper.toResponse(eq(post), eq("Author One"), isNull(), eq(UserRole.USER), eq(false),
                 anyList()))
                 .thenReturn(toResponse(post, "Author One", UserRole.USER, false));
 
@@ -341,7 +342,7 @@ class PostServiceTest {
         when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author(authorId, "Author")));
         when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "signal"));
-        when(postMapper.toResponse(eq(post), eq("Author"), any(String.class), eq(UserRole.USER), eq(true), anyList()))
+        when(postMapper.toResponse(eq(post), eq("Author"), isNull(), eq(UserRole.USER), eq(true), anyList()))
                 .thenAnswer(invocation -> toResponse(post, "Author", UserRole.USER, true));
 
         PostResponse response = postService.likePost(userId, postId);
@@ -371,7 +372,7 @@ class PostServiceTest {
         when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author(authorId, "Author")));
         when(topicDiscoveryService.deriveTopicKeywords(any())).thenReturn(List.of("graph", "signal"));
-        when(postMapper.toResponse(eq(post), eq("Author"), any(String.class), eq(UserRole.USER), eq(false), anyList()))
+        when(postMapper.toResponse(eq(post), eq("Author"), isNull(), eq(UserRole.USER), eq(false), anyList()))
                 .thenAnswer(invocation -> toResponse(post, "Author", UserRole.USER, false));
 
         PostResponse response = postService.unlikePost(userId, postId);
