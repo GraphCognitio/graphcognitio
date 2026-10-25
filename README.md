@@ -2,6 +2,12 @@
 
 Backend API for GraphCognitio, a graph-oriented social platform where posts are nodes and replies are directed `REPLY` edges (`reply -> parent`).
 
+## Portfolio review
+
+This independent project models a conversation as posts and directed reply edges. The backend in this repository is **Java/Spring Boot**, not Node.js/NestJS. The [React/TypeScript frontend and screenshots](https://github.com/GraphCognitio/graphcognitio-web) are maintained separately.
+
+Start with `GraphService` for graph assembly, the feed/search paths for cursor pagination, and tests for authorization and API behavior. The local setup below is the evaluation path; no public production deployment is promised here.
+
 ## Tech Stack
 
 - Java 17
